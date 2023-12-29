@@ -26,4 +26,5 @@ pub trait WorkerRepositoryTrait: Sync {
 
     /// Retrieves information about a thread with the specified ID.
     fn get_thread(&self, name: &str) -> Option<Worker>;
+    fn start_worker_thread(&self, name: &str);
 }

@@ -69,10 +69,18 @@ impl Worker {
     }
 
     // Getter for custom function
-    pub fn custom_function(&self) -> Option<Box<dyn Fn() + Send + '_>> {
+    // pub fn custom_function(&self) -> Option<Box<dyn Fn() + Send + '_>> {
+    //     self.custom_function
+    //         .as_ref()
+    //         .map(move |func| Box::new(move || (func.lock().unwrap().function)()) as Box<dyn Fn() + Send>)
+    // }
+    pub fn cloned_custom_function(&self) -> Option<Box<dyn Fn() + Send + 'static>> {
         self.custom_function
             .as_ref()
-            .map(move |func| Box::new(move || (func.lock().unwrap().function)()) as Box<dyn Fn() + Send>)
+            .map(|func| {
+                let cloned_func = (func.lock().unwrap().function)().clone();
+                Box::new(move || cloned_func) as Box<dyn Fn() + Send + 'static>
+            })
     }
 }
 
@@ -118,7 +126,7 @@ mod tests {
         };
 
         let worker = Worker::new("John Doe", Some(Box::new(custom_function.clone())));
-        let retrieved_function = worker.custom_function();
+        let retrieved_function = worker.cloned_custom_function();
 
         assert_eq!(retrieved_function.is_some(), true);
     }

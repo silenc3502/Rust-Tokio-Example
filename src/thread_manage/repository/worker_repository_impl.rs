@@ -1,113 +1,7 @@
-// use std::collections::HashMap;
-// use std::sync::{Arc, RwLock};
-// use std::thread::ThreadId;
-// use lazy_static::lazy_static;
-// use crate::thread_manage::entity::worker::Worker;
-// use crate::thread_manage::repository::worker_repository::WorkerRepositoryTrait;
-//
-// lazy_static! {
-//     static ref THREADS: Arc<RwLock<HashMap<ThreadId, Worker>>> = Arc::new(RwLock::new(HashMap::new()));
-// }
-//
-// #[derive(Debug)]
-// pub struct WorkerRepositoryImpl {
-//     pub threads: Arc<RwLock<HashMap<ThreadId, Worker>>>,
-// }
-//
-// impl PartialEq for WorkerRepositoryImpl {
-//     fn eq(&self, other: &Self) -> bool {
-//         Arc::ptr_eq(&self.threads, &other.threads)
-//     }
-// }
-//
-// unsafe impl Sync for WorkerRepositoryImpl {}
-//
-// impl WorkerRepositoryImpl {
-//     pub fn new() -> Self {
-//         WorkerRepositoryImpl {
-//             threads: Arc::clone(&THREADS),
-//         }
-//     }
-// }
-//
-// impl Clone for WorkerRepositoryImpl {
-//     fn clone(&self) -> Self {
-//         WorkerRepositoryImpl {
-//             threads: Arc::clone(&THREADS),
-//         }
-//     }
-// }
-//
-// impl WorkerRepositoryTrait for WorkerRepositoryImpl {
-//     fn save_thread(&self, thread_id: ThreadId, name: &str, custom_function: Option<Box<dyn Fn()>>) {
-//         let mut threads = self.threads.write().unwrap();
-//         let worker = Worker::new(name, custom_function);
-//         threads.insert(thread_id, worker);
-//     }
-//
-//     fn generate_thread_id(&self) -> ThreadId {
-//         std::thread::current().id()
-//     }
-//
-//     fn get_thread(&self, thread_id: ThreadId) -> Option<Worker> {
-//         let threads = self.threads.read().unwrap();
-//         threads.get(&thread_id).cloned()
-//     }
-// }
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn test_singleton_behavior() {
-//         let repository1 = WorkerRepositoryImpl::new();
-//         let repository2 = repository1.clone();
-//
-//         let arc1 = Arc::clone(&repository1.threads);
-//         let arc2 = Arc::clone(&repository2.threads);
-//
-//         assert!(Arc::ptr_eq(&arc1, &arc2));
-//     }
-//
-//     #[test]
-//     fn test_save_and_get_thread() {
-//         let repository = WorkerRepositoryImpl::new();
-//
-//         let thread_id = repository.generate_thread_id();
-//         repository.save_thread(thread_id, "John Doe", None);
-//
-//         let retrieved_worker = repository.get_thread(thread_id);
-//
-//         assert_eq!(
-//             retrieved_worker,
-//             Some(Worker::new("John Doe", None))
-//         );
-//     }
-//
-//     #[test]
-//     fn test_save_thread_with_custom_function() {
-//         let repository = WorkerRepositoryImpl::new();
-//
-//         let thread_id = repository.generate_thread_id();
-//         let custom_function = || {
-//             println!("Custom function executed!");
-//         };
-//
-//         repository.save_thread(thread_id, "John Doe", Some(Box::new(custom_function)));
-//
-//         let retrieved_worker = repository.get_thread(thread_id);
-//
-//         assert_eq!(
-//             retrieved_worker,
-//             Some(Worker::new("John Doe", Some(Box::new(custom_function))))
-//         );
-//     }
-// }
-
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, Weak};
 use std::sync::Once;
+use std::thread;
 use lazy_static::lazy_static;
 use crate::thread_manage::entity::worker::Worker;
 use crate::thread_manage::repository::worker_repository::WorkerRepositoryTrait;
@@ -152,10 +46,32 @@ impl WorkerRepositoryTrait for WorkerRepositoryImpl {
         let workers = self.workers.lock().unwrap();
         workers.get(name).cloned()
     }
+
+    fn start_worker_thread(&self, name: &str) {
+        if let Some(worker) = self.get_thread(name) {
+            if let Some(custom_function) = worker.cloned_custom_function() {
+                let name_owned = name.to_string(); // 소유권 이전
+                thread::spawn(move || {
+                    println!("Starting worker thread for: {}", name_owned);
+                    custom_function();
+                    println!("Worker thread finished for: {}", name_owned);
+                });
+            } else {
+                println!("No custom function available for worker: {}", name);
+            }
+        } else {
+            println!("Worker not found: {}", name);
+        }
+    }
+
+
+
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Weak;
     use super::*;
 
     #[test]
@@ -173,7 +89,7 @@ mod tests {
 
         let worker = repository.get_thread("John Doe").expect("Worker not found.");
         assert_eq!(worker.name(), "John Doe");
-        assert!(worker.custom_function().is_none());
+        assert!(worker.cloned_custom_function().is_none()); // 수정된 부분
     }
 
     #[test]
@@ -187,7 +103,7 @@ mod tests {
 
         let worker = repository.get_thread("John Doe").expect("Worker not found.");
         assert_eq!(worker.name(), "John Doe");
-        assert!(worker.custom_function().is_some());
+        assert!(worker.cloned_custom_function().is_some());
     }
 
     #[test]
@@ -207,39 +123,48 @@ mod tests {
         assert_eq!(worker.name(), "Jane Doe");
     }
 
-    // #[test]
-    // fn test_save_and_get_thread() {
-    //     let repository = WorkerRepositoryImpl::new();
-    //
-    //     let thread_id = repository.generate_thread_id();
-    //     repository.save_thread(thread_id, "John Doe", None).unwrap();
-    //
-    //     let retrieved_worker = repository.get_thread(thread_id);
-    //
-    //     assert_eq!(
-    //         retrieved_worker,
-    //         Some(Worker::new("John Doe", None))
-    //     );
-    // }
-    //
-    // #[test]
-    // fn test_save_thread_with_custom_function() {
-    //     let repository = WorkerRepositoryImpl::new();
-    //
-    //     let thread_id = repository.generate_thread_id();
-    //     let custom_function = || {
-    //         println!("Custom function executed!");
-    //     };
-    //
-    //     repository.save_thread(thread_id, "John Doe", Some(Box::new(custom_function))).unwrap();
-    //
-    //     let retrieved_worker = repository.get_thread(thread_id);
-    //
-    //     assert_eq!(
-    //         retrieved_worker,
-    //         Some(Worker::new("John Doe", Some(Box::new(custom_function))))
-    //     );
-    // }
+    #[test]
+    fn test_start_worker_thread_with_custom_function() {
+        // Create a worker with a custom function
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+        let custom_function = move || {
+            println!("Custom function executed!");
+            // Set the flag to true when the function is executed
+            let mut lock = custom_function_executed_clone.lock().unwrap();
+            *lock = true;
+        };
+        let worker = Worker::new("Alice", Some(Box::new(custom_function.clone())));
+
+        // Create a repository with the worker
+        let repository = WorkerRepositoryImpl::new();
+        repository.save_thread("Alice", Some(Box::new(custom_function)));
+
+        // Start the worker thread using the repository
+        repository.start_worker_thread("Alice");
+
+        // Allow some time for the thread to execute
+        thread::sleep(std::time::Duration::from_secs(1));
+
+        // Check if the custom function was executed
+        let lock = custom_function_executed.lock().unwrap();
+        assert_eq!(*lock, true);
+    }
+
+    #[test]
+    fn test_start_worker_thread_without_custom_function() {
+        // Create a worker without a custom function
+        let worker = Worker::new("Bob", None);
+
+        // Create a repository with the worker
+        let repository = WorkerRepositoryImpl::new();
+        repository.save_thread("Bob", None);
+
+        // Start the worker thread using the repository
+        repository.start_worker_thread("Bob");
+
+        // No custom function, so the thread won't do anything
+    }
 }
 
 

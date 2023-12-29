@@ -35,75 +35,20 @@ fn main() {
     // println!("Value: {}", result);
 
     let worker_service = WorkerServiceImpl::get_instance();
-
-    worker_service.lock().unwrap().as_ref().unwrap().create_thread("Alice", None);
-
-    // Retrieve the worker named "Alice"
-    let retrieved_worker = worker_service
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .get_thread("Alice");
-
-    // Display information about the retrieved worker
-    match retrieved_worker {
-        Some(worker) => {
-            println!("Retrieved worker: {:?}", worker);
-            // Accessing the name using the custom function getter
-            match worker.custom_function() {
-                Some(custom_function) => {
-                    println!("Executing custom function:");
-                    custom_function();
-                }
-                None => {
-                    println!("No custom function available for this worker.");
-                }
-            }
-        }
-        None => {
-            println!("Worker not found.");
-        }
-    }
-
+    let worker_name = "Receiver";
     let custom_function = || {
         println!("Custom function executed!");
     };
+    worker_service.lock().unwrap().as_ref().unwrap().create_thread(worker_name, Some(Box::new(custom_function)));
 
     worker_service
         .lock()
         .unwrap()
         .as_ref()
         .unwrap()
-        .create_thread("Tester", Some(Box::new(custom_function)));
+        .start_worker(worker_name);
 
-    // Retrieve the worker named "Alice"
-    let retrieved_worker = worker_service
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .get_thread("Tester");
-
-    // Display information about the retrieved worker
-    match retrieved_worker {
-        Some(worker) => {
-            println!("Retrieved worker: {:?}", worker);
-            // Accessing the name using the custom function getter
-            match worker.custom_function() {
-                Some(custom_function) => {
-                    println!("Executing custom function:");
-                    custom_function();
-                }
-                None => {
-                    println!("No custom function available for this worker.");
-                }
-            }
-        }
-        None => {
-            println!("Worker not found.");
-        }
-    }
+    std::thread::sleep(std::time::Duration::from_secs(5));
     //
     // // 쓰레드 생성 및 ID 가져오기
     // let thread_id = worker_service.lock().unwrap().create_thread("Thread 1");

@@ -1,5 +1,6 @@
 mod thread_manage;
 
+use std::thread;
 // use std::collections::HashMap;
 // use std::sync::{Arc, Mutex, RwLock};
 use redis::Commands;
@@ -56,4 +57,15 @@ fn main() {
     } else {
         println!("Thread not found with ID: {:?}", thread_id);
     };
+
+    println!("Main Thread ID: {:?}", thread::current().id());
+
+    // 새로운 스레드 생성
+    let handle = thread::spawn(|| {
+        // 생성된 스레드의 ID 출력
+        println!("Spawned Thread ID: {:?}", thread::current().id());
+    });
+
+    // 생성된 스레드의 종료 대기
+    handle.join().unwrap();
 }

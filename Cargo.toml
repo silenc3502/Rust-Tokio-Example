@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 redis = "*"
-#once_cell = "*"
 lazy_static="*"
+tokio = { version = "*", features = ["full"] }
+async-trait = "*"

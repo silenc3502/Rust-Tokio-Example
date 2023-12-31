@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Once};
 use lazy_static::lazy_static;
+use tokio::task;
 use crate::thread_control::entity::thread_worker::ThreadWorker;
 use crate::thread_control::repository::thread_worker_repository::ThreadWorkerRepositoryTrait;
 use crate::thread_manage_legacy::entity::worker::Worker;
@@ -45,6 +46,24 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
         let thread_worker_list = self.thread_worker_list.lock().unwrap();
         thread_worker_list.get(name).cloned()
     }
+
+    fn start_thread_worker(&self, name: &str) {
+        // 이름으로 Worker를 찾아옵니다.
+        if let Some(worker) = self.find_by_name(name) {
+            // Worker의 클론된 함수를 가져와서 Tokio의 spawn_blocking을 이용해 동기적으로 실행합니다.
+            if let Some(cloned_function) = worker.cloned_custom_function() {
+                task::spawn_blocking(move || {
+                    cloned_function();
+                });
+            } else {
+                // 클론된 함수가 없다면 에러를 처리하거나 다른 방법으로 처리합니다.
+                eprintln!("Worker {} does not have a custom function.", name);
+            }
+        } else {
+            // Worker를 찾을 수 없다면 에러를 처리하거나 다른 방법으로 처리합니다.
+            eprintln!("Worker {} not found.", name);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -52,6 +71,8 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Weak;
     use std::thread;
+    use std::time::Duration;
+    use tokio::time::sleep;
     use crate::thread_manage_legacy::entity::worker::Worker;
     use crate::thread_manage_legacy::repository::worker_repository_impl::WorkerRepositoryImpl;
     use super::*;
@@ -105,45 +126,69 @@ mod tests {
         assert_eq!(thread_worker.name(), "Jane Doe");
     }
 
-    // #[test]
-    // fn test_start_worker_thread_with_custom_function() {
-    //     let custom_function_executed = Arc::new(Mutex::new(false));
-    //     let custom_function_executed_clone = Arc::clone(&custom_function_executed);
-    //     let custom_function = move || {
-    //         println!("Custom function executed!");
-    //         // Set the flag to true when the function is executed
-    //         let mut lock = custom_function_executed_clone.lock().unwrap();
-    //         *lock = true;
-    //     };
-    //     let worker = Worker::new("Alice", Some(Box::new(custom_function.clone())));
-    //
-    //     // Create a repository with the worker
-    //     let repository = WorkerRepositoryImpl::new();
-    //     repository.save_thread("Alice", Some(Box::new(custom_function)));
-    //
-    //     // Start the worker thread using the repository
-    //     repository.start_worker_thread("Alice");
-    //
-    //     // Allow some time for the thread to execute
-    //     thread::sleep(std::time::Duration::from_secs(1));
-    //
-    //     // Check if the custom function was executed
-    //     let lock = custom_function_executed.lock().unwrap();
-    //     assert_eq!(*lock, true);
-    // }
-    //
-    // #[test]
-    // fn test_start_worker_thread_without_custom_function() {
-    //     // Create a worker without a custom function
-    //     let worker = Worker::new("Bob", None);
-    //
-    //     // Create a repository with the worker
-    //     let repository = WorkerRepositoryImpl::new();
-    //     repository.save_thread("Bob", None);
-    //
-    //     // Start the worker thread using the repository
-    //     repository.start_worker_thread("Bob");
-    //
-    //     // No custom function, so the thread won't do anything
-    // }
+    #[tokio::test]
+    async fn test_start_thread_worker() {
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+
+        // 테스트를 위한 ThreadWorkerRepositoryImpl 인스턴스 생성
+        let repository = ThreadWorkerRepositoryImpl::new();
+
+        // 클로저를 따로 변수에 저장
+        let custom_function = move || {
+            println!("Custom function executed!");
+
+            // Set the flag to true when the function is executed
+            let mut lock = custom_function_executed_clone.lock().unwrap();
+            *lock = true;
+        };
+
+        // ThreadWorker 저장
+        repository.save_thread_worker("TestWorker", Some(Box::new(custom_function)));
+
+        // start_thread_worker를 호출하여 비동기 작업을 시작
+        repository.start_thread_worker("TestWorker");
+
+        // 메인 스레드에서 다른 작업 수행 가능
+        for _ in 0..3 {
+            println!("Main thread working...");
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // 특정 시간 동안 대기하여 비동기 작업이 완료될 때까지 기다립니다.
+        sleep(Duration::from_secs(2)).await;
+
+        // 클로저가 실행되었는지 확인하는 코드 추가
+        let lock = custom_function_executed.lock().unwrap();
+        assert_eq!(*lock, true);
+    }
+
+    #[tokio::test]
+    async fn test_start_worker_thread_without_custom_function() {
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+
+        // 테스트를 위한 ThreadWorkerRepositoryImpl 인스턴스 생성
+        let repository = ThreadWorkerRepositoryImpl::new();
+
+        // ThreadWorker 저장 (커스텀 함수 없음)
+        repository.save_thread_worker("TestWorkerWithoutFunction", None);
+
+        // start_thread_worker를 호출하여 비동기 작업을 시작
+        repository.start_thread_worker("TestWorkerWithoutFunction");
+
+        // 메인 스레드에서 다른 작업 수행 가능
+        for _ in 0..3 {
+            println!("Main thread working...");
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // 특정 시간 동안 대기하여 비동기 작업이 완료될 때까지 기다립니다.
+        sleep(Duration::from_secs(2)).await;
+        println!("2초 대기 완료!");
+
+        // 클로저가 실행되었는지 확인하는 코드 추가 (커스텀 함수가 없으므로 false여야 함)
+        let lock = custom_function_executed_clone.lock().unwrap();
+        assert_eq!(*lock, false);
+    }
 }

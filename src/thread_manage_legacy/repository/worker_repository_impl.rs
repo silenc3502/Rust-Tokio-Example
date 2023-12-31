@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex, Weak};
 use std::sync::Once;
 use std::thread;
 use lazy_static::lazy_static;
-use crate::thread_manage::entity::worker::Worker;
-use crate::thread_manage::repository::worker_repository::WorkerRepositoryTrait;
+use crate::thread_manage_legacy::entity::worker::Worker;
+use crate::thread_manage_legacy::repository::worker_repository::WorkerRepositoryTrait;
 
 #[derive(Debug, Clone)]
 pub struct WorkerRepositoryImpl {

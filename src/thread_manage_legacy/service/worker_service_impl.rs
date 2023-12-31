@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex, Once};
 use lazy_static::lazy_static;
-use crate::thread_manage::entity::worker::Worker;
-use crate::thread_manage::repository::worker_repository::WorkerRepositoryTrait;
-use crate::thread_manage::repository::worker_repository_impl::WorkerRepositoryImpl;
-use crate::thread_manage::service::worker_service::WorkerServiceTrait;
+use crate::thread_manage_legacy::entity::worker::Worker;
+use crate::thread_manage_legacy::repository::worker_repository::WorkerRepositoryTrait;
+use crate::thread_manage_legacy::repository::worker_repository_impl::WorkerRepositoryImpl;
+use crate::thread_manage_legacy::service::worker_service::WorkerServiceTrait;
 
 lazy_static! {
     static ref THREAD_SERVICE: Arc<Mutex<Option<WorkerServiceImpl>>> = Arc::new(Mutex::new(None));
@@ -59,7 +59,7 @@ impl WorkerServiceTrait for WorkerServiceImpl {
 mod tests {
     use std::thread;
     use super::*;
-    use crate::thread_manage::service::worker_service::WorkerServiceTrait;
+    use crate::thread_manage_legacy::service::worker_service::WorkerServiceTrait;
 
     #[test]
     fn test_singleton_behavior() {

@@ -68,12 +68,6 @@ impl Worker {
         &self.name
     }
 
-    // Getter for custom function
-    // pub fn custom_function(&self) -> Option<Box<dyn Fn() + Send + '_>> {
-    //     self.custom_function
-    //         .as_ref()
-    //         .map(move |func| Box::new(move || (func.lock().unwrap().function)()) as Box<dyn Fn() + Send>)
-    // }
     pub fn cloned_custom_function(&self) -> Option<Box<dyn Fn() + Send + 'static>> {
         self.custom_function
             .as_ref()

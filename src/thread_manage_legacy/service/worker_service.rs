@@ -1,4 +1,4 @@
-use crate::thread_manage::entity::worker::Worker;
+use crate::thread_manage_legacy::entity::worker::Worker;
 
 pub trait WorkerServiceTrait {
     fn create_thread(&self, name: &str, custom_function: Option<Box<dyn Fn() + Send + 'static>>);

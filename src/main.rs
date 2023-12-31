@@ -1,13 +1,14 @@
-mod thread_manage;
+mod thread_manage_legacy;
 mod server_socket;
 mod utility;
+mod thread_control;
 
 use std::thread;
 
 use redis::Commands;
-use crate::thread_manage::service::worker_service::WorkerServiceTrait;
-use crate::thread_manage::service::worker_service_impl::WorkerServiceImpl;
-// use crate::thread_manage::service::worker_service_impl::get_worker_service;
+use crate::thread_manage_legacy::service::worker_service::WorkerServiceTrait;
+use crate::thread_manage_legacy::service::worker_service_impl::WorkerServiceImpl;
+// use crate::thread_manage_legacy::service::worker_service_impl::get_worker_service;
 
 
 fn main() {

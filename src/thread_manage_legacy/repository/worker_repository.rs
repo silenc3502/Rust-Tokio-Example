@@ -1,5 +1,5 @@
 use std::thread::ThreadId;
-use crate::thread_manage::entity::worker::Worker;
+use crate::thread_manage_legacy::entity::worker::Worker;
 
 // pub trait WorkerRepositoryTrait: Sync {
 //     fn save_thread(&self, thread_id: ThreadId, name: &str, custom_function: Option<Box<dyn Fn()>>);

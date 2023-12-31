@@ -4,7 +4,6 @@ use lazy_static::lazy_static;
 use tokio::task;
 use crate::thread_control::entity::thread_worker::ThreadWorker;
 use crate::thread_control::repository::thread_worker_repository::ThreadWorkerRepositoryTrait;
-use crate::thread_manage_legacy::entity::worker::Worker;
 
 #[derive(Debug, Clone)]
 pub struct ThreadWorkerRepositoryImpl {

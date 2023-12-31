@@ -1,16 +1,23 @@
+use std::collections::HashMap;
 use tokio::net::TcpListener;
 use std::sync::{Arc, Mutex, Once};
+use std::time::Duration;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
+use crate::server_socket::entity::socket_client::SocketClient;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
 
 pub struct ServerSocketRepositoryImpl {
     listener: Option<TcpListener>,
+    // client_list: HashMap<String, SocketClient>
 }
 
 impl ServerSocketRepositoryImpl {
     pub fn new() -> Self {
-        ServerSocketRepositoryImpl { listener: None }
+        ServerSocketRepositoryImpl {
+            listener: None,
+            // client_list: HashMap::new(),
+        }
     }
 }
 
@@ -28,6 +35,31 @@ impl ServerSocketRepository for ServerSocketRepositoryImpl {
     fn get_listener(&self) -> Option<&tokio::net::TcpListener> {
         self.listener.as_ref()
     }
+
+    // async fn accept_client(&self) {
+    //     // Implement the logic to accept and handle clients here
+    //     // Example: continuously accept clients in a loop
+    //     loop {
+    //         if let Some(listener) = &self.listener {
+    //             match listener.accept().await {
+    //                 Ok((stream, _)) => {
+    //                     // Create a new SocketClient for the accepted client
+    //                     let client = SocketClient::new(stream);
+    //
+    //                     // Add the client to the client list
+    //                     self.client_list.lock().unwrap().insert(client.id.clone(), client.clone());
+    //                 }
+    //                 Err(err) => {
+    //                     // Handle the error (e.g., log or propagate)
+    //                     eprintln!("Error accepting client: {:?}", err);
+    //                 }
+    //             }
+    //         } else {
+    //             // Handle the case when the listener is not yet bound
+    //             tokio::time::sleep(Duration::from_secs(1)).await;
+    //         }
+    //     }
+    // }
 }
 
 lazy_static! {

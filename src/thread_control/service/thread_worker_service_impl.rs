@@ -45,10 +45,29 @@ impl ThreadWorkerServiceTrait for ThreadWorkerServiceImpl {
         repository_guard.as_ref().and_then(|repository| repository.find_by_name(name))
     }
 
-    // fn start_worker(&self, name: &str) {
-    //     let repository = self.repository.lock().unwrap();
-    //     repository.as_ref().unwrap().start_worker_thread(name);
-    // }
+    fn start_worker(&self, name: &str) {
+        let repository_guard = self.repository.lock().unwrap();
+
+        if let Some(repository) = repository_guard.as_ref() {
+            repository.start_thread_worker(name);
+        } else {
+            eprintln!("Repository is not initialized.");
+        }
+    }
+}
+
+pub fn get_thread_worker_service() -> &'static Mutex<Option<ThreadWorkerServiceImpl>> {
+    INIT.call_once(|| {
+        // ThreadWorkerRepositoryImpl을 생성합니다.
+        let repository = ThreadWorkerRepositoryImpl::new();
+
+        // ThreadWorkerServiceImpl을 생성하고 repository를 주입합니다.
+        let service = ThreadWorkerServiceImpl::new(Arc::new(Mutex::new(Some(repository))));
+
+        // 생성한 ThreadWorkerServiceImpl을 lazy_static!에서 관리하는 THREAD_SERVICE에 저장합니다.
+        *THREAD_SERVICE.lock().unwrap() = Some(service);
+    });
+    &THREAD_SERVICE
 }
 
 #[cfg(test)]
@@ -86,34 +105,71 @@ mod tests {
         assert_eq!(retrieved_worker, None);
     }
 
-    // #[test]
-    // fn test_start_worker_thread_with_custom_function() {
-    //     let instance = ThreadWorkerServiceImpl::get_instance();
-    //
-    //     let custom_function_executed = Arc::new(Mutex::new(false));
-    //     let custom_function_executed_clone = Arc::clone(&custom_function_executed);
-    //     let custom_function = move || {
-    //         println!("Custom function executed!");
-    //         *custom_function_executed_clone.lock().unwrap() = true;
-    //     };
-    //     let worker_name = "Alice";
-    //     instance
-    //         .lock()
-    //         .unwrap()
-    //         .as_ref()
-    //         .unwrap()
-    //         .create_thread(worker_name, Some(Box::new(custom_function.clone())));
-    //
-    //     instance
-    //         .lock()
-    //         .unwrap()
-    //         .as_ref()
-    //         .unwrap()
-    //         .start_worker(worker_name);
-    //
-    //     thread::sleep(std::time::Duration::from_secs(1));
-    //
-    //     let lock = custom_function_executed.lock().unwrap();
-    //     assert_eq!(*lock, true);
-    // }
+    #[tokio::test]
+    async fn test_start_worker_thread_with_custom_function() {
+        let instance = ThreadWorkerServiceImpl::get_instance();
+
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+        let custom_function = move || {
+            println!("Custom function executed!");
+            *custom_function_executed_clone.lock().unwrap() = true;
+        };
+        let worker_name = "Alice";
+
+        // Create thread with custom function
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .create_thread(worker_name, Some(Box::new(custom_function.clone())));
+
+        // Start the worker thread
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .start_worker(worker_name);
+
+        // Allow some time for the thread to execute
+        thread::sleep(std::time::Duration::from_secs(1));
+
+        // Check if the custom function was executed
+        let lock = custom_function_executed.lock().unwrap();
+        assert_eq!(*lock, true);
+    }
+
+    #[tokio::test]
+    async fn test_start_worker_thread_without_custom_function() {
+        let instance = ThreadWorkerServiceImpl::get_instance();
+
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+        let worker_name = "Bob";
+
+        // Create thread without custom function
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .create_thread(worker_name, None);
+
+        // Start the worker thread
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .start_worker(worker_name);
+
+        // Allow some time for the thread to execute
+        thread::sleep(std::time::Duration::from_secs(1));
+
+        // Check if the custom function was not executed
+        let lock = custom_function_executed.lock().unwrap();
+        assert_eq!(*lock, false);
+    }
 }

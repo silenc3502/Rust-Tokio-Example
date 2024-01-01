@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Mutex, Once};
 use lazy_static::lazy_static;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
 use crate::server_socket::repository::ServerSocketRepositoryImpl::ServerSocketRepositoryImpl;
@@ -12,6 +12,15 @@ pub struct ServerSocketServiceImpl {
 impl ServerSocketServiceImpl {
     pub fn new(repository: ServerSocketRepositoryImpl) -> Self {
         ServerSocketServiceImpl { repository }
+    }
+
+    pub fn get_instance() -> &'static Mutex<Option<ServerSocketServiceImpl>> {
+        INIT.call_once(|| {
+            let repository = ServerSocketRepositoryImpl::new();
+            let service = ServerSocketServiceImpl::new(repository);
+            *SERVER_SOCKET_SERVICE.lock().unwrap() = Some(service);
+        });
+        &SERVER_SOCKET_SERVICE
     }
 }
 
@@ -39,6 +48,7 @@ pub fn get_server_socket_service() -> &'static Mutex<Option<ServerSocketServiceI
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use super::*;
     use tokio::time::Duration;
 

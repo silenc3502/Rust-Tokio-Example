@@ -1,15 +1,20 @@
-use std::collections::HashMap;
 use tokio::net::TcpListener;
-use std::sync::{Arc, Mutex, Once};
-use std::time::Duration;
+use std::sync::{Mutex, Once};
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use crate::server_socket::entity::socket_client::SocketClient;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
 
 pub struct ServerSocketRepositoryImpl {
     listener: Option<TcpListener>,
     // client_list: HashMap<String, SocketClient>
+}
+
+impl Clone for ServerSocketRepositoryImpl {
+    fn clone(&self) -> Self {
+        ServerSocketRepositoryImpl {
+            listener: None, // or create a new TcpListener if needed
+        }
+    }
 }
 
 impl ServerSocketRepositoryImpl {
@@ -77,6 +82,7 @@ fn get_server_socket_repository() -> &'static Mutex<Option<ServerSocketRepositor
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use super::*;
     use tokio::time::Duration;
 

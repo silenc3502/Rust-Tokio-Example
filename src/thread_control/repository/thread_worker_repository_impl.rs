@@ -49,8 +49,10 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
     fn start_thread_worker(&self, name: &str) {
         // 이름으로 Worker를 찾아옵니다.
         if let Some(worker) = self.find_by_name(name) {
+            println!("Worker start!");
             // Worker의 클론된 함수를 가져와서 Tokio의 spawn_blocking을 이용해 동기적으로 실행합니다.
             if let Some(cloned_function) = worker.cloned_custom_function() {
+                println!("cloned_function() start!");
                 task::spawn_blocking(move || {
                     cloned_function();
                 });
@@ -72,8 +74,6 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use tokio::time::sleep;
-    use crate::thread_manage_legacy::entity::worker::Worker;
-    use crate::thread_manage_legacy::repository::worker_repository_impl::WorkerRepositoryImpl;
     use super::*;
 
     #[test]

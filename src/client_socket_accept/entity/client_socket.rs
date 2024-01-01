@@ -1,24 +1,26 @@
+use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
 
+#[derive(Clone)]
 pub struct ClientSocket {
     address: String,  // 클라이언트의 주소 또는 식별자
-    stream: TcpStream,  // 클라이언트와의 연결을 나타내는 TcpStream
+    stream: Arc<Mutex<TcpStream>>,  // 클라이언트와의 연결을 나타내는 TcpStream
 }
 
 impl ClientSocket {
-    // 생성자
     pub fn new(address: String, stream: TcpStream) -> Self {
-        ClientSocket { address, stream }
+        ClientSocket {
+            address,
+            stream: Arc::new(Mutex::new(stream)),
+        }
     }
 
-    // 주소 getter
     pub fn address(&self) -> &str {
         &self.address
     }
 
-    // TcpStream getter
-    pub fn stream(&self) -> &TcpStream {
-        &self.stream
+    pub fn stream(&self) -> Arc<Mutex<TcpStream>> {
+        self.stream.clone()
     }
 }
 

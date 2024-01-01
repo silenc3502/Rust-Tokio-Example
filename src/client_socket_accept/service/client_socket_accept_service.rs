@@ -1,8 +1,6 @@
-use tokio::net::TcpListener;
-
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait ClientSocketRepository {
+pub trait ClientSocketAcceptService: Send + Sync {
     async fn accept_client(&self);
 }

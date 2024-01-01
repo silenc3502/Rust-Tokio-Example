@@ -4,56 +4,80 @@ mod utility;
 mod thread_control;
 mod client_socket_accept;
 
-use std::thread;
 
-use redis::Commands;
-use crate::thread_manage_legacy::service::worker_service::WorkerServiceTrait;
-use crate::thread_manage_legacy::service::worker_service_impl::WorkerServiceImpl;
+use crate::client_socket_accept::controller::client_socket_accept_controller::ClientSocketAcceptController;
+use crate::client_socket_accept::controller::client_socket_accept_controller_impl::ClientSocketAcceptControllerImpl;
+// use crate::client_socket_accept::controller::client_socket_accept_controller_impl::ClientSocketAcceptControllerImpl;
+use crate::server_socket::service::ServerSocketService::ServerSocketService;
+use crate::server_socket::service::ServerSocketServiceImpl::ServerSocketServiceImpl;
+use crate::thread_control::service::thread_worker_service::ThreadWorkerServiceTrait;
+// use redis::Commands;
+// use crate::thread_control::service::thread_worker_service::ThreadWorkerServiceTrait;
+use crate::thread_control::service::thread_worker_service_impl::ThreadWorkerServiceImpl;
+// use crate::thread_manage_legacy::service::worker_service::WorkerServiceTrait;
+// use crate::thread_manage_legacy::service::worker_service_impl::WorkerServiceImpl;
+use crate::utility::initializer::DomainInitializer;
 // use crate::thread_manage_legacy::service::worker_service_impl::get_worker_service;
 
+#[tokio::main]
+async fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-fn main() {
-    // let client = redis::Client::open("redis://127.0.0.1/")
-    //     .expect("Failed to connect to Redis");
-    //
-    // let mut connection = client
-    //     .get_connection()
-    //     .expect("Failed to connect to Redis with password");
-    //
-    // let _: () = redis::cmd("AUTH")
-    //     .arg("eddi@123")
-    //     .query(&mut connection)
-    //     .expect("Failed to authenticate to Redis");
-    //
-    // let _: () = redis::cmd("SET")
-    //     .arg("testkey")
-    //     .arg("Hello, EDDI Redis")
-    //     .query(&mut connection)
-    //     .expect("Failed to set key");
-    //
-    // let result: String = redis::cmd("GET")
-    //     .arg("testkey")
-    //     .query(&mut connection)
-    //     .expect("Failed to get key");
-    //
-    // println!("Value: {}", result);
+    let domain_initializer = DomainInitializer;
+    domain_initializer.init_server_socket_domain();
+    domain_initializer.init_thread_control_domain();
+    domain_initializer.init_client_socket_accept_domain();
 
-    let worker_service = WorkerServiceImpl::get_instance();
-    let worker_name = "Receiver";
-    let custom_function = || {
-        println!("Custom function executed!");
+    let server_socket_service = ServerSocketServiceImpl::get_instance();
+
+    // Define the address to bind to
+    let address = "127.0.0.1:7373";
+
+    // Lock the mutex to get a mutable reference to ServerSocketServiceImpl
+    let mut service_guard = server_socket_service.lock().unwrap();
+
+    // Dereference the MutexGuard to access the inner ServerSocketServiceImpl
+    let server_socket_service_impl = service_guard.as_mut().expect("Service not initialized");
+
+    // Call the bind method on the inner ServerSocketServiceImpl
+    match server_socket_service_impl.bind(address).await {
+        Ok(()) => {
+            println!("Server bound to address: {}", address);
+        }
+        Err(err) => {
+            eprintln!("Error binding socket: {:?}", err);
+        }
+    }
+
+    let client_socket_accept_controller = ClientSocketAcceptControllerImpl::get_instance();
+
+    let thread_worker_service = ThreadWorkerServiceImpl::get_instance();
+
+    let custom_function = move || {
+        println!("Controller instance found. Executing accept_client().");
+        // Attempt to execute accept_client() on the controller
+        client_socket_accept_controller.accept_client();
+        println!("accept_client() executed successfully.");
     };
-    worker_service.lock().unwrap().as_ref().unwrap().create_thread(worker_name, Some(Box::new(custom_function)));
 
-    worker_service
+    // Create a thread with the custom function
+    thread_worker_service
         .lock()
         .unwrap()
         .as_ref()
         .unwrap()
-        .start_worker(worker_name);
+        .create_thread("Acceptor", Some(Box::new(custom_function)));
 
-    std::thread::sleep(std::time::Duration::from_secs(5));
-    //
+    // Start the worker thread
+    thread_worker_service
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .start_worker("Acceptor");
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
     // // 쓰레드 생성 및 ID 가져오기
     // let thread_id = worker_service.lock().unwrap().create_thread("Thread 1");
     // println!("Created thread with ID: {:?}", thread_id);
@@ -64,7 +88,7 @@ fn main() {
     // } else {
     //     println!("Thread not found with ID: {:?}", thread_id);
     // };
-    //
+
     // println!("Main Thread ID: {:?}", thread::current().id());
     //
     // // 새로운 스레드 생성

@@ -23,7 +23,7 @@ impl ThreadWorkerServiceImpl {
     pub fn get_instance() -> Arc<Mutex<Option<ThreadWorkerServiceImpl>>> {
         INIT.call_once(|| {
             let repository = ThreadWorkerRepositoryImpl::get_instance();
-            let instance = Arc::new(Mutex::new(Some(ThreadWorkerServiceImpl::new(repository.clone()))));
+            // let instance = Arc::new(Mutex::new(Some(ThreadWorkerServiceImpl::new(repository.clone()))));
             *THREAD_SERVICE.lock().unwrap() = Some(ThreadWorkerServiceImpl::new(repository));
         });
         THREAD_SERVICE.clone()
@@ -73,6 +73,9 @@ pub fn get_thread_worker_service() -> &'static Mutex<Option<ThreadWorkerServiceI
 #[cfg(test)]
 mod tests {
     use std::thread;
+    use std::time::Duration;
+    use crate::client_socket_accept::controller::client_socket_accept_controller::ClientSocketAcceptController;
+    use crate::client_socket_accept::controller::client_socket_accept_controller_impl::get_client_socket_accept_controller;
     use super::*;
 
     #[test]
@@ -171,5 +174,208 @@ mod tests {
         // Check if the custom function was not executed
         let lock = custom_function_executed.lock().unwrap();
         assert_eq!(*lock, false);
+    }
+
+    #[tokio::test]
+    async fn test_start_worker_thread_with_specific_object() {
+        #[derive(Clone)]
+        struct HelloObject;
+
+        impl HelloObject {
+            fn get_message(&self) -> &'static str {
+                "Hello, World!"
+            }
+        }
+
+        // Initialize the thread worker service
+        let instance = get_thread_worker_service();
+
+        // HelloObject instance
+        let hello_object = HelloObject;
+
+        // Custom function using HelloObject
+        let custom_function = move || {
+            println!("Custom function executed! Message: {}", hello_object.get_message());
+        };
+        let worker_name = "Alice";
+
+        // Create thread with custom function
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .create_thread(worker_name, Some(Box::new(custom_function.clone())));
+
+        // Start the worker thread
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .start_worker(worker_name);
+
+        // Allow some time for the thread to execute
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    #[tokio::test]
+    async fn test_start_worker_thread_with_locked_object() {
+        lazy_static! {
+            static ref HELLO_OBJECT_INSTANCE: Arc<Mutex<Option<HelloObject>>> = Arc::new(Mutex::new(None));
+            static ref INIT: Once = Once::new();
+        }
+
+        pub struct HelloObject;
+
+        impl HelloObject {
+            pub fn new() -> Self {
+                HelloObject
+            }
+
+            pub fn get_message(&self) -> &'static str {
+                "Hello, World!"
+            }
+        }
+
+        pub fn get_hello_object_instance() -> Arc<Mutex<Option<HelloObject>>> {
+            INIT.call_once(|| {
+                *HELLO_OBJECT_INSTANCE.lock().unwrap() = Some(HelloObject::new());
+            });
+            HELLO_OBJECT_INSTANCE.clone()
+        }
+
+        // Initialize the thread worker service
+        let instance = get_thread_worker_service();
+
+        let hello_object_instance = get_hello_object_instance();
+
+        // Clone the HelloObject instance inside the worker function
+        let custom_function = move || {
+            let binding = hello_object_instance.lock().unwrap();
+            let hello_object = binding.as_ref().unwrap().clone();
+            println!("Custom function executed! Message: {}", hello_object.get_message());
+        };
+        let worker_name = "Alice";
+
+        // Create thread with custom function
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .create_thread(worker_name, Some(Box::new(custom_function.clone())));
+
+        // Start the worker thread
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .start_worker(worker_name);
+
+        // Allow some time for the thread to execute
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    #[tokio::test]
+    async fn test_start_worker_thread_with_dependency_call() {
+        pub trait HelloObjectService: Send {
+            fn get_message(&self) -> &'static str;
+        }
+
+        // HelloObjectServiceImpl as an implementation of HelloObjectService
+        pub struct HelloObjectServiceImpl;
+
+        impl HelloObjectService for HelloObjectServiceImpl {
+            fn get_message(&self) -> &'static str {
+                println!("Service Call");
+                "Hello, World!"
+            }
+        }
+
+        impl Clone for HelloObjectServiceImpl {
+            fn clone(&self) -> Self {
+                HelloObjectServiceImpl
+            }
+        }
+
+        // HelloObject with a dependency on HelloObjectService
+        #[derive(Clone)]
+        pub struct HelloObject {
+            // The dependency on HelloObjectService
+            service: Arc<Mutex<Option<Box<dyn HelloObjectService>>>>,
+        }
+
+        impl HelloObject {
+            pub fn new() -> Self {
+                HelloObject {
+                    service: Arc::new(Mutex::new(None)),
+                }
+            }
+
+            // Set the HelloObjectService dependency
+            pub fn set_service(&self, service: Box<dyn HelloObjectService>) {
+                *self.service.lock().unwrap() = Some(service);
+            }
+
+            // Call a function from the dependency
+            pub fn dependency_call(&self) -> &'static str {
+                println!("Controller Call");
+                // Access the dependency and call its function
+                let service = self.service.lock().unwrap();
+                service.as_ref().map_or("Dependency not set", |s| s.get_message())
+            }
+
+            pub fn clone(&self) -> Self {
+                HelloObject {
+                    service: Arc::clone(&self.service),
+                }
+            }
+        }
+
+        // Lazy initialization for HelloObjectService
+        lazy_static! {
+            static ref HELLO_OBJECT_SERVICE_INSTANCE: Arc<Mutex<Option<HelloObjectServiceImpl>>> =
+                Arc::new(Mutex::new(None));
+            static ref INIT: Once = Once::new();
+        }
+
+        // Initialize the thread worker service
+        let instance = get_thread_worker_service();
+
+        INIT.call_once(|| {
+            *HELLO_OBJECT_SERVICE_INSTANCE.lock().unwrap() = Some(HelloObjectServiceImpl);
+        });
+
+        let hello_object_instance = HELLO_OBJECT_SERVICE_INSTANCE.clone();
+
+        let hello_object = HelloObject::new();
+        hello_object.set_service(Box::new(hello_object_instance.lock().unwrap().as_ref().unwrap().clone()));
+
+        let custom_function = move || {
+            println!("Custom function executed! Message: {}", hello_object.dependency_call());
+        };
+
+        let worker_name = "Alice";
+
+        // Create thread with custom function
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .create_thread(worker_name, Some(Box::new(custom_function.clone())));
+
+        // Start the worker thread
+        instance
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .start_worker(worker_name);
+
+        // Allow some time for the thread to execute
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }

@@ -10,3 +10,4 @@ redis = "*"
 lazy_static="*"
 tokio = { version = "*", features = ["full"] }
 async-trait = "*"
+env_logger = { version = "0.10.1", features = [] }

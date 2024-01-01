@@ -43,6 +43,8 @@ mod tests {
     use tokio::time::Duration;
     use tokio::net::TcpListener;
     use crate::client_socket_accept::repository::client_socket_accept_repository_impl::ClientSocketAcceptRepositoryImpl;
+    use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
+    use crate::server_socket::repository::ServerSocketRepositoryImpl::ServerSocketRepositoryImpl;
 
     #[tokio::test]
     async fn test_controller_singleton_behavior() {
@@ -56,16 +58,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_controller_accept_client() {
-        // Set up your controller and service instances
+        let mut server_socket_repository = ServerSocketRepositoryImpl::new();
+        let address = "127.0.0.1:7373";
+        let result = server_socket_repository.bind_socket(address).await;
+
+        assert!(result.is_ok());
+        assert!(server_socket_repository.get_listener().is_some());
+
         let controller = ClientSocketAcceptControllerImpl::get_instance();
         let service = ClientSocketAcceptServiceImpl::get_instance();
         let repository = ClientSocketAcceptRepositoryImpl::get_instance();
 
         // Use Tokio's spawn to run the async method
         tokio::spawn(async move {
-            // Create a dummy TcpListener for testing
-            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-
             // Call accept_client on the controller
             controller.accept_client().await;
 
@@ -73,7 +78,7 @@ mod tests {
         });
 
         // Sleep for a short duration to allow the async method to run
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(30)).await;
 
         // The test passes if it reaches this point without panicking
     }

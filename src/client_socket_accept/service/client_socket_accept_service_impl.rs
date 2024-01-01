@@ -28,9 +28,11 @@ impl ClientSocketAcceptServiceImpl {
 
 lazy_static! {
     static ref CLIENT_SOCKET_ACCEPT_SERVICE: Arc<ClientSocketAcceptServiceImpl> = {
+        let server_socket_repository = ServerSocketRepositoryImpl::get_instance();
+
         Arc::new(ClientSocketAcceptServiceImpl::new(
             ClientSocketAcceptRepositoryImpl::get_instance().as_ref().clone(),
-            ServerSocketRepositoryImpl::new(),
+            server_socket_repository.unwrap(),
         ))
     };
 }

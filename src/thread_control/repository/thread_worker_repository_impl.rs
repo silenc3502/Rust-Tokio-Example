@@ -190,4 +190,74 @@ mod tests {
         let lock = custom_function_executed_clone.lock().unwrap();
         assert_eq!(*lock, false);
     }
+
+    #[tokio::test]
+    async fn test_custom_function_execution_without_println() {
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+
+        // 테스트를 위한 ThreadWorkerRepositoryImpl 인스턴스 생성
+        let repository = ThreadWorkerRepositoryImpl::new();
+
+        // 클로저를 따로 변수에 저장 (println! 제거)
+        let custom_function = move || {
+            // Set the flag to true when the function is executed
+            let mut lock = custom_function_executed_clone.lock().unwrap();
+            *lock = true;
+        };
+
+        // ThreadWorker 저장
+        repository.save_thread_worker("TestWorker", Some(Box::new(custom_function)));
+
+        // start_thread_worker를 호출하여 함수 실행
+        repository.start_thread_worker("TestWorker");
+
+        // 클로저가 실행되었는지 확인하는 코드 추가
+        let lock = custom_function_executed.lock().unwrap();
+        assert_eq!(*lock, true);
+    }
+
+    #[tokio::test]
+    async fn test_custom_function_execution_with_dependency_call() {
+        pub struct ClassB;
+
+        impl ClassB {
+            pub fn bcall(&self) {
+                println!("Class B method called");
+            }
+        }
+
+        // Define Class A with a dependency on Class B
+        pub struct ClassA {
+            b_instance: ClassB,
+        }
+
+        impl ClassA {
+            pub fn new() -> Self {
+                ClassA { b_instance: ClassB }
+            }
+
+            pub fn acall(&self) {
+                println!("Class A method called");
+                self.b_instance.bcall();
+            }
+        }
+
+        let custom_function_executed = Arc::new(Mutex::new(false));
+        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+        let repository = ThreadWorkerRepositoryImpl::new();
+
+        let class_a_instance = ClassA::new();
+
+        let custom_function = move || {
+            let mut lock = custom_function_executed_clone.lock().unwrap();
+            class_a_instance.acall();
+            *lock = true;
+        };
+
+        repository.save_thread_worker("TestWorker", Some(Box::new(custom_function)));
+        repository.start_thread_worker("TestWorker");
+        let lock = custom_function_executed.lock().unwrap();
+        assert_eq!(*lock, true);
+    }
 }

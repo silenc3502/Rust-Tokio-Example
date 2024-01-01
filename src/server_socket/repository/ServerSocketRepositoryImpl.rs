@@ -1,9 +1,10 @@
 use tokio::net::TcpListener;
-use std::sync::{Mutex, Once};
+use std::sync::{Arc, Mutex, Once};
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
 
+#[derive(Debug)]
 pub struct ServerSocketRepositoryImpl {
     listener: Option<TcpListener>,
     // client_list: HashMap<String, SocketClient>
@@ -17,12 +18,30 @@ impl Clone for ServerSocketRepositoryImpl {
     }
 }
 
+impl Eq for ServerSocketRepositoryImpl {}
+
+impl PartialEq for ServerSocketRepositoryImpl {
+    fn eq(&self, other: &Self) -> bool {
+        // Customize the equality comparison as needed for your use case
+        // For simplicity, let's consider them equal if both are None
+        self.listener.is_none() && other.listener.is_none()
+    }
+}
+
 impl ServerSocketRepositoryImpl {
     pub fn new() -> Self {
         ServerSocketRepositoryImpl {
             listener: None,
             // client_list: HashMap::new(),
         }
+    }
+
+    pub fn get_instance() -> Option<ServerSocketRepositoryImpl> {
+        INIT.call_once(|| {
+            let repository = ServerSocketRepositoryImpl { listener: None };
+            *SERVER_SOCKET_REPOSITORY.lock().unwrap() = Some(repository);
+        });
+        SERVER_SOCKET_REPOSITORY.lock().unwrap().as_ref().cloned()
     }
 }
 
@@ -142,7 +161,15 @@ mod tests {
                 panic!("Error binding socket: {:?}", err);
             }
         }
+    }
 
+    #[tokio::test]
+    async fn test_get_instance() {
+        let instance1 = ServerSocketRepositoryImpl::get_instance();
+        let instance2 = ServerSocketRepositoryImpl::get_instance();
+
+        // Ensure that the instances are the same
+        assert_eq!(instance1, instance2);
     }
 }
 

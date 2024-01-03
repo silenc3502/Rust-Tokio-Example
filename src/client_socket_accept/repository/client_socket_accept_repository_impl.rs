@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use tokio::net::TcpListener;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use crate::client_socket_accept::entity::client_socket::ClientSocket;
@@ -8,25 +9,25 @@ use crate::client_socket_accept::repository::client_socket_accept_repository::Cl
 
 #[derive(Clone)]
 pub struct ClientSocketAcceptRepositoryImpl {
-    client_list: Arc<Mutex<HashMap<String, ClientSocket>>>,
+    client_list: Arc<AsyncMutex<HashMap<String, ClientSocket>>>,
 }
 
 impl ClientSocketAcceptRepositoryImpl {
     pub fn new() -> Self {
         ClientSocketAcceptRepositoryImpl {
-            client_list: Arc::new(Mutex::new(HashMap::new())),
+            client_list: Arc::new(AsyncMutex::new(HashMap::new())),
         }
     }
 
-    // pub fn get_instance() -> Arc<Mutex<ClientSocketAcceptRepositoryImpl>> {
-    //     lazy_static! {
-    //         static ref INSTANCE: Arc<Mutex<ClientSocketAcceptRepositoryImpl>> =
-    //             Arc::new(Mutex::new(ClientSocketAcceptRepositoryImpl::new()));
-    //     }
-    //     INSTANCE.clone()
-    // }
+    pub fn get_instance() -> Arc<AsyncMutex<ClientSocketAcceptRepositoryImpl>> {
+        lazy_static! {
+            static ref INSTANCE: Arc<AsyncMutex<ClientSocketAcceptRepositoryImpl>> =
+                Arc::new(AsyncMutex::new(ClientSocketAcceptRepositoryImpl::new()));
+        }
+        INSTANCE.clone()
+    }
 
-    pub fn get_client_list(&self) -> &Arc<Mutex<HashMap<String, ClientSocket>>> {
+    pub fn get_client_list(&self) -> &Arc<AsyncMutex<HashMap<String, ClientSocket>>> {
         &self.client_list
     }
 }
@@ -44,7 +45,8 @@ impl ClientSocketAcceptRepository for ClientSocketAcceptRepositoryImpl {
                     let client = ClientSocket::new(peer_addr.to_string(), stream);
 
                     // Add the client to the client list
-                    self.client_list.lock().unwrap().insert(client.address().to_string(), client.clone());
+                    let mut client_list_gaurd = self.client_list.lock().await;
+                    client_list_gaurd.insert(client.address().to_string(), client.clone());
                 }
                 Err(err) => {
                     // Handle the error (e.g., log or propagate)
@@ -55,26 +57,26 @@ impl ClientSocketAcceptRepository for ClientSocketAcceptRepositoryImpl {
     }
 }
 
-lazy_static! {
-    static ref CLIENT_SOCKET_ACCEPT_REPOSITORY: Mutex<Option<Arc<ClientSocketAcceptRepositoryImpl>>> = Mutex::new(None);
-    static ref INIT: Once = Once::new();
-}
-
-impl ClientSocketAcceptRepositoryImpl {
-    pub fn get_instance() -> Arc<ClientSocketAcceptRepositoryImpl> {
-        INIT.call_once(|| {
-            let repository = ClientSocketAcceptRepositoryImpl::new();
-            *CLIENT_SOCKET_ACCEPT_REPOSITORY.lock().unwrap() = Some(Arc::new(repository));
-        });
-
-        CLIENT_SOCKET_ACCEPT_REPOSITORY
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .clone()
-    }
-}
+// lazy_static! {
+//     static ref CLIENT_SOCKET_ACCEPT_REPOSITORY: Mutex<Option<Arc<ClientSocketAcceptRepositoryImpl>>> = Mutex::new(None);
+//     static ref INIT: Once = Once::new();
+// }
+//
+// impl ClientSocketAcceptRepositoryImpl {
+//     pub fn get_instance() -> Arc<ClientSocketAcceptRepositoryImpl> {
+//         INIT.call_once(|| {
+//             let repository = ClientSocketAcceptRepositoryImpl::new();
+//             *CLIENT_SOCKET_ACCEPT_REPOSITORY.lock().unwrap() = Some(Arc::new(repository));
+//         });
+//
+//         CLIENT_SOCKET_ACCEPT_REPOSITORY
+//             .lock()
+//             .unwrap()
+//             .as_ref()
+//             .unwrap()
+//             .clone()
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -92,25 +94,17 @@ mod tests {
     #[tokio::test]
     async fn test_accept_client() {
         let listener = Arc::new(TcpListener::bind("127.0.0.1:7128").await.expect("Failed to bind to address"));
-
-        // Get the instance of ClientSocketAcceptRepository
         let repository = ClientSocketAcceptRepositoryImpl::get_instance();
-
-        // Clone the Arc, not the TcpListener itself
         let listener_clone = listener.clone();
 
-        // Spawn the accept_client function in a separate task
         tokio::spawn(async move {
-            repository.accept_client(&listener_clone).await;
+            let repository_gaurd = repository.lock().await;
+            repository_gaurd.accept_client(&listener_clone).await;
         });
 
-        // Wait for a short duration to simulate client connections
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
-        // Here, you can add assertions or checks based on your requirements
-        // For example, you can check if the client_list has been updated with new clients.
-
-        // In this example, we're just checking if the listener is still open
         assert!(listener.local_addr().is_ok());
     }
 }

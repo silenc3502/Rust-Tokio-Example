@@ -1,62 +1,39 @@
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
 use crate::server_socket::repository::ServerSocketRepositoryImpl::ServerSocketRepositoryImpl;
 use crate::server_socket::service::ServerSocketService::ServerSocketService;
+use crate::thread_control::repository::thread_worker_repository_impl::ThreadWorkerRepositoryImpl;
 
 #[derive(Clone)]
 pub struct ServerSocketServiceImpl {
-    repository: ServerSocketRepositoryImpl,
+    repository: Arc<Mutex<ServerSocketRepositoryImpl>>,
 }
 
 impl ServerSocketServiceImpl {
-    pub fn new(repository: ServerSocketRepositoryImpl) -> Self {
+    pub fn new(repository: Arc<Mutex<ServerSocketRepositoryImpl>>) -> Self {
         ServerSocketServiceImpl { repository }
     }
 
-    pub fn get_instance() -> &'static Arc<Mutex<ServerSocketServiceImpl>> {
-        INIT.call_once(|| {
-            let repository = match ServerSocketRepositoryImpl::get_instance() {
-                Some(repo) => repo,
-                None => {
-                    eprintln!("Failed to get ServerSocketRepositoryImpl");
-                    return;
-                }
-            };
-            let service = ServerSocketServiceImpl::new(repository);
-            *SERVER_SOCKET_SERVICE.lock().unwrap() = Some(Arc::new(Mutex::new(service)));
-        });
-        &SERVER_SOCKET_SERVICE
+    pub fn get_instance() -> Arc<Mutex<ServerSocketServiceImpl>> {
+        lazy_static! {
+            static ref INSTANCE: Arc<Mutex<ServerSocketServiceImpl>> =
+                Arc::new(
+                    Mutex::new(
+                        ServerSocketServiceImpl::new(
+                            ServerSocketRepositoryImpl::get_instance())));
+        }
+        INSTANCE.clone()
     }
 }
 
 #[async_trait]
 impl ServerSocketService for ServerSocketServiceImpl {
-    async fn bind(&mut self, address: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.repository.bind_socket(address).await
+    async fn server_socket_bind(&mut self, address: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut repository_guard = self.repository.lock().unwrap();
+        repository_guard.bind_socket(address).await
     }
-}
-
-lazy_static! {
-    static ref SERVER_SOCKET_SERVICE: Mutex<Option<ServerSocketServiceImpl>> = Mutex::new(None);
-    static ref INIT: Once = Once::new();
-}
-
-pub fn get_server_socket_service() -> &'static Mutex<Option<ServerSocketServiceImpl>> {
-    INIT.call_once(|| {
-        let repository = match ServerSocketRepositoryImpl::get_instance() {
-            Some(repo) => repo,
-            None => {
-                // Handle None case as needed
-                eprintln!("Failed to get ServerSocketRepositoryImpl");
-                return;
-            }
-        };
-        let service = ServerSocketServiceImpl::new(repository);
-        *SERVER_SOCKET_SERVICE.lock().unwrap() = Some(service);
-    });
-    &SERVER_SOCKET_SERVICE
 }
 
 impl AsRef<ServerSocketRepositoryImpl> for ServerSocketRepositoryImpl {
@@ -70,8 +47,6 @@ impl AsRef<ServerSocketRepositoryImpl> for ServerSocketRepositoryImpl {
 mod tests {
     use std::sync::Arc;
     use super::*;
-    use tokio::time::Duration;
-    use crate::server_socket::repository::ServerSocketRepositoryImpl::get_server_socket_repository;
 
     #[tokio::test]
     async fn test_get_instance() {

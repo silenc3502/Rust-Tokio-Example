@@ -1,5 +1,6 @@
 use tokio::net::TcpListener;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
@@ -32,12 +33,12 @@ impl ServerSocketRepositoryImpl {
         }
     }
 
-    pub fn get_instance() -> &'static Arc<Mutex<ServerSocketRepositoryImpl>> {
+    pub fn get_instance() -> Arc<AsyncMutex<ServerSocketRepositoryImpl>> {
         lazy_static! {
-            static ref INSTANCE: Arc<Mutex<ServerSocketRepositoryImpl>> =
-                Arc::new(Mutex::new(ServerSocketRepositoryImpl::new()));
+            static ref INSTANCE: Arc<AsyncMutex<ServerSocketRepositoryImpl>> =
+                Arc::new(AsyncMutex::new(ServerSocketRepositoryImpl::new()));
         }
-        &INSTANCE
+        INSTANCE.clone()
     }
 }
 
@@ -55,7 +56,7 @@ impl ServerSocketRepository for ServerSocketRepositoryImpl {
         Ok(())
     }
 
-    fn get_listener(&self) -> Option<&tokio::net::TcpListener> {
+    fn get_listener(&self) -> Option<&TcpListener> {
         self.listener.as_ref()
     }
 }
@@ -67,10 +68,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_bind_socket() {
-        let repository = Arc::new(Mutex::new(ServerSocketRepositoryImpl::new()));
+        // let repository = Arc::new(Mutex::new(ServerSocketRepositoryImpl::new()));
+        let repository_mutex = ServerSocketRepositoryImpl::get_instance();
+        let mut repository_guard = repository_mutex.lock().await;
         let address = "127.0.0.1:37373";
-
-        let mut repository_guard = repository.lock().unwrap();
 
         match repository_guard.bind_socket(address).await {
             Ok(()) => {
@@ -91,8 +92,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_listener_unbound() {
-        let repository = Arc::new(Mutex::new(ServerSocketRepositoryImpl::new()));
-        let repository_guard = repository.lock().unwrap();
+        let repository_mutex = ServerSocketRepositoryImpl::get_instance();
+        let mut repository_guard = repository_mutex.lock().await;
         let listener = repository_guard.get_listener();
 
         assert!(listener.is_none());
@@ -100,10 +101,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_listener_bound() {
-        let repository = Arc::new(Mutex::new(ServerSocketRepositoryImpl::new()));
+        let repository_mutex = ServerSocketRepositoryImpl::get_instance();
+        let mut repository_guard = repository_mutex.lock().await;
         let address = "127.0.0.1:9787";
-
-        let mut repository_guard = repository.lock().unwrap();
 
         match repository_guard.bind_socket(address).await {
             Ok(()) => {
@@ -121,7 +121,7 @@ mod tests {
         let instance1 = ServerSocketRepositoryImpl::get_instance();
         let instance2 = ServerSocketRepositoryImpl::get_instance();
 
-        assert_eq!(instance1 as *const _, instance2 as *const _);
+        assert!(Arc::ptr_eq(&instance1, &instance2));
     }
 }
 

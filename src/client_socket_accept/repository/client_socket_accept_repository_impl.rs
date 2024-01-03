@@ -17,6 +17,18 @@ impl ClientSocketAcceptRepositoryImpl {
             client_list: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
+    // pub fn get_instance() -> Arc<Mutex<ClientSocketAcceptRepositoryImpl>> {
+    //     lazy_static! {
+    //         static ref INSTANCE: Arc<Mutex<ClientSocketAcceptRepositoryImpl>> =
+    //             Arc::new(Mutex::new(ClientSocketAcceptRepositoryImpl::new()));
+    //     }
+    //     INSTANCE.clone()
+    // }
+
+    pub fn get_client_list(&self) -> &Arc<Mutex<HashMap<String, ClientSocket>>> {
+        &self.client_list
+    }
 }
 
 #[async_trait]

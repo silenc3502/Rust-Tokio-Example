@@ -1,7 +1,12 @@
-use crate::thread_control::entity::thread_worker::ThreadWorker;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use async_trait::async_trait;
 
+#[async_trait]
 pub trait ThreadWorkerServiceTrait {
-    fn create_thread(&self, name: &str, custom_function: Option<Box<dyn Fn() + Send + 'static>>);
-    fn get_thread(&self, name: &str) -> Option<ThreadWorker>;
-    fn start_worker(&self, name: &str);
+    fn save_async_thread_worker(&mut self, name: &str, will_be_execute_function: Arc<Mutex<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>);
+    fn save_sync_thread_worker(&mut self, name: &str, will_be_execute_function: Arc<Mutex<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>);
+    async fn start_thread_worker(&self, name: &str);
 }
+

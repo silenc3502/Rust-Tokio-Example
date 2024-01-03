@@ -1,263 +1,295 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, Once};
+use std::future::Future;
+use std::ops::Deref;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use async_trait::async_trait;
 use lazy_static::lazy_static;
+use tokio::runtime::Handle;
 use tokio::task;
 use crate::thread_control::entity::thread_worker::ThreadWorker;
 use crate::thread_control::repository::thread_worker_repository::ThreadWorkerRepositoryTrait;
 
-#[derive(Debug, Clone)]
 pub struct ThreadWorkerRepositoryImpl {
-    thread_worker_list: Arc<Mutex<HashMap<String, ThreadWorker>>>,
-}
-
-lazy_static! {
-    static ref WORKER_REPOSITORY: Arc<Mutex<Option<ThreadWorkerRepositoryImpl>>> = Arc::new(Mutex::new(None));
-    static ref INIT: Once = Once::new();
-}
-
-fn initialize_repository() -> ThreadWorkerRepositoryImpl {
-    ThreadWorkerRepositoryImpl {
-        thread_worker_list: Arc::new(Mutex::new(HashMap::new())),
-    }
+    thread_worker_list: HashMap<String, ThreadWorker>,
 }
 
 impl ThreadWorkerRepositoryImpl {
     pub fn new() -> Self {
-        initialize_repository()
+        ThreadWorkerRepositoryImpl {
+            thread_worker_list: HashMap::new(),
+        }
     }
 
-    pub fn get_instance() -> Arc<Mutex<Option<ThreadWorkerRepositoryImpl>>> {
-        INIT.call_once(|| {
-            *WORKER_REPOSITORY.lock().unwrap() = Some(initialize_repository());
-        });
-        WORKER_REPOSITORY.clone()
+    pub fn get_instance() -> Arc<Mutex<ThreadWorkerRepositoryImpl>> {
+        lazy_static! {
+            static ref INSTANCE: Arc<Mutex<ThreadWorkerRepositoryImpl>> =
+                Arc::new(Mutex::new(ThreadWorkerRepositoryImpl::new()));
+        }
+        INSTANCE.clone()
+    }
+
+    pub fn get_thread_worker_list(&self) -> &HashMap<String, ThreadWorker> {
+        &self.thread_worker_list
     }
 }
 
+#[async_trait]
 impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
-    fn save_thread_worker(&self, name: &str, custom_function: Option<Box<dyn Fn() + Send + 'static>>) {
-        let mut thread_worker_list = self.thread_worker_list.lock().unwrap();
-        let thread_worker = ThreadWorker::new(name, custom_function);
-        thread_worker_list.insert(name.to_string(), thread_worker);
+    fn save_thread_worker(
+        &mut self,
+        name: &str,
+        will_be_execute_function: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send + 'static>>,
+    ) {
+        let thread_worker = ThreadWorker::new(name, will_be_execute_function);
+        self.thread_worker_list.insert(name.to_string(), thread_worker);
     }
 
     fn find_by_name(&self, name: &str) -> Option<ThreadWorker> {
-        let thread_worker_list = self.thread_worker_list.lock().unwrap();
-        thread_worker_list.get(name).cloned()
+        self.thread_worker_list.get(name).cloned()
     }
 
-    fn start_thread_worker(&self, name: &str) {
-        // 이름으로 Worker를 찾아옵니다.
-        if let Some(worker) = self.find_by_name(name) {
-            println!("Worker start!");
-            // Worker의 클론된 함수를 가져와서 Tokio의 spawn_blocking을 이용해 동기적으로 실행합니다.
-            if let Some(cloned_function) = worker.cloned_custom_function() {
-                println!("cloned_function() start!");
-                task::spawn_blocking(move || {
-                    cloned_function();
+    async fn start_thread_worker(&self, name: &str) {
+        let thread_worker_list = self.get_thread_worker_list();
+
+        if let Some(worker) = thread_worker_list.get(name) {
+            if let Some(function_arc_ref) = worker.get_will_be_execute_function_ref() {
+                // function_arc_ref의 타입: &Arc<Mutex<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>>
+                let guard = function_arc_ref.lock().await;
+                let box_function = &guard;
+
+                let fucking_gpt_test = &*guard;
+                let shit_gpt_test= &**fucking_gpt_test;
+
+                // &dyn Fn()
+                // let closure: &dyn Fn() = &*guard;
+
+                // custom_function: fn() -> Pin<Box<dyn Future<Output=()>>>
+                //                          Pin<Box<dyn Future<Output=()>>>
+                // let future: &dyn Fn() = shit_gpt_test();
+                // future;
+
+                let future = shit_gpt_test();
+                // let runtime = tokio::runtime::Runtime::new().unwrap();
+                // runtime.block_on(future);
+                task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        future.await
+                    });
                 });
+
+                // Add an assertion to check if the worker name matches
+                assert_eq!(worker.name(), name);
             } else {
-                // 클론된 함수가 없다면 에러를 처리하거나 다른 방법으로 처리합니다.
-                eprintln!("Worker {} does not have a custom function.", name);
+                panic!("Thread worker function not found: {}", name);
             }
         } else {
-            // Worker를 찾을 수 없다면 에러를 처리하거나 다른 방법으로 처리합니다.
-            eprintln!("Worker {} not found.", name);
+            panic!("Thread worker not found: {}", name);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Weak;
-    use std::thread;
-    use std::time::Duration;
-    use tokio::time::sleep;
     use super::*;
+    use tokio::test;
 
-    #[test]
-    fn test_singleton_behavior() {
-        let repository1 = ThreadWorkerRepositoryImpl::new();
-        let repository2 = repository1.clone();
+    fn my_sync_function() {
+        println!("Synchronous function is executed!");
+    }
 
-        assert!(Arc::ptr_eq(&repository1.thread_worker_list, &repository2.thread_worker_list));
+    async fn my_async_function() {
+        println!("Asynchronous function is executed!");
     }
 
     #[test]
-    fn test_save_thread_worker() {
-        let repository = ThreadWorkerRepositoryImpl::new();
-        repository.save_thread_worker("John Doe", None);
+    async fn test_singleton() {
+        let instance1 = ThreadWorkerRepositoryImpl::get_instance();
+        let instance2 = ThreadWorkerRepositoryImpl::get_instance();
 
-        let thread_worker = repository.find_by_name("John Doe").expect("Worker not found.");
-        assert_eq!(thread_worker.name(), "John Doe");
-        assert!(thread_worker.cloned_custom_function().is_none()); // 수정된 부분
-    }
-
-    #[test]
-    fn test_save_thread_with_custom_function() {
-        let repository = ThreadWorkerRepositoryImpl::new();
-        let custom_function = || {
-            println!("Custom function executed!");
-        };
-
-        repository.save_thread_worker("John Doe", Some(Box::new(custom_function)));
-
-        let thread_worker = repository.find_by_name("John Doe").expect("Worker not found.");
-        assert_eq!(thread_worker.name(), "John Doe");
-        assert!(thread_worker.cloned_custom_function().is_some());
-    }
-
-    #[test]
-    fn test_get_thread_nonexistent() {
-        let repository = ThreadWorkerRepositoryImpl::new();
-
-        let thread_worker = repository.find_by_name("Nonexistent");
-        assert!(thread_worker.is_none());
-    }
-
-    #[test]
-    fn test_get_thread_existing() {
-        let repository = ThreadWorkerRepositoryImpl::new();
-        repository.save_thread_worker("Jane Doe", None);
-
-        let thread_worker = repository.find_by_name("Jane Doe").expect("Worker not found.");
-        assert_eq!(thread_worker.name(), "Jane Doe");
+        // Ensure that both instances are the same
+        assert_eq!(Arc::ptr_eq(&instance1, &instance2), true);
     }
 
     #[tokio::test]
-    async fn test_start_thread_worker() {
-        let custom_function_executed = Arc::new(Mutex::new(false));
-        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+    async fn test_save_thread_worker() {
+        let repository = ThreadWorkerRepositoryImpl::get_instance();
 
-        // 테스트를 위한 ThreadWorkerRepositoryImpl 인스턴스 생성
-        let repository = ThreadWorkerRepositoryImpl::new();
+        // Lock the mutex to access the repository
+        let mut repository = repository.lock().unwrap();
 
-        // 클로저를 따로 변수에 저장
-        let custom_function = move || {
-            println!("Custom function executed!");
-
-            // Set the flag to true when the function is executed
-            let mut lock = custom_function_executed_clone.lock().unwrap();
-            *lock = true;
+        let custom_function = || -> Pin<Box<dyn Future<Output = ()>>> {
+            Box::pin(async {
+                println!("Custom function executed!");
+            })
         };
 
-        // ThreadWorker 저장
+        // Save a thread worker
         repository.save_thread_worker("TestWorker", Some(Box::new(custom_function)));
 
-        // start_thread_worker를 호출하여 비동기 작업을 시작
-        repository.start_thread_worker("TestWorker");
+        // Retrieve the saved worker and execute its function
+        if let Some(worker) = repository.thread_worker_list.get("TestWorker") {
+            let function_arc = Arc::clone(&worker.get_will_be_execute_function().unwrap());
 
-        // 메인 스레드에서 다른 작업 수행 가능
-        for _ in 0..3 {
-            println!("Main thread working...");
-            sleep(Duration::from_secs(1)).await;
+            // Lock the Mutex to get the guard
+            let guard = function_arc.lock().await;
+
+            // Extract the closure from the Box inside the Mutex guard
+            let function = &*guard;
+
+            // Call the closure and execute the future
+            let future = function();
+            future.await;
+
+            // Add an assertion to check if the worker name matches
+            assert_eq!(worker.name(), "TestWorker");
+        } else {
+            panic!("Thread worker not found!");
         }
-
-        // 특정 시간 동안 대기하여 비동기 작업이 완료될 때까지 기다립니다.
-        sleep(Duration::from_secs(2)).await;
-
-        // 클로저가 실행되었는지 확인하는 코드 추가
-        let lock = custom_function_executed.lock().unwrap();
-        assert_eq!(*lock, true);
     }
 
     #[tokio::test]
-    async fn test_start_worker_thread_without_custom_function() {
-        let custom_function_executed = Arc::new(Mutex::new(false));
-        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
+    async fn test_save_sync_thread_worker() {
+        let repository = ThreadWorkerRepositoryImpl::get_instance();
 
-        // 테스트를 위한 ThreadWorkerRepositoryImpl 인스턴스 생성
-        let repository = ThreadWorkerRepositoryImpl::new();
+        // Lock the mutex to access the repository
+        let mut repository = repository.lock().unwrap();
 
-        // ThreadWorker 저장 (커스텀 함수 없음)
-        repository.save_thread_worker("TestWorkerWithoutFunction", None);
-
-        // start_thread_worker를 호출하여 비동기 작업을 시작
-        repository.start_thread_worker("TestWorkerWithoutFunction");
-
-        // 메인 스레드에서 다른 작업 수행 가능
-        for _ in 0..3 {
-            println!("Main thread working...");
-            sleep(Duration::from_secs(1)).await;
-        }
-
-        // 특정 시간 동안 대기하여 비동기 작업이 완료될 때까지 기다립니다.
-        sleep(Duration::from_secs(2)).await;
-        println!("2초 대기 완료!");
-
-        // 클로저가 실행되었는지 확인하는 코드 추가 (커스텀 함수가 없으므로 false여야 함)
-        let lock = custom_function_executed_clone.lock().unwrap();
-        assert_eq!(*lock, false);
-    }
-
-    #[tokio::test]
-    async fn test_custom_function_execution_without_println() {
-        let custom_function_executed = Arc::new(Mutex::new(false));
-        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
-
-        // 테스트를 위한 ThreadWorkerRepositoryImpl 인스턴스 생성
-        let repository = ThreadWorkerRepositoryImpl::new();
-
-        // 클로저를 따로 변수에 저장 (println! 제거)
-        let custom_function = move || {
-            // Set the flag to true when the function is executed
-            let mut lock = custom_function_executed_clone.lock().unwrap();
-            *lock = true;
+        // Synchronous function
+        let sync_custom_function = || {
+            Box::pin(async {
+                my_sync_function();
+            }) as Pin<Box<dyn Future<Output = ()>>>
         };
 
-        // ThreadWorker 저장
-        repository.save_thread_worker("TestWorker", Some(Box::new(custom_function)));
+        // Save a thread worker with a synchronous function
+        repository.save_thread_worker("SyncTestWorker", Some(Box::new(sync_custom_function)));
 
-        // start_thread_worker를 호출하여 함수 실행
-        repository.start_thread_worker("TestWorker");
+        // Retrieve and execute the saved worker's function
+        if let Some(worker) = repository.thread_worker_list.get("SyncTestWorker") {
+            let function_arc = Arc::clone(&worker.get_will_be_execute_function().unwrap());
 
-        // 클로저가 실행되었는지 확인하는 코드 추가
-        let lock = custom_function_executed.lock().unwrap();
-        assert_eq!(*lock, true);
+            // Lock the Mutex to get the guard
+            let guard = function_arc.lock().await;
+
+            // Extract the closure from the Box inside the Mutex guard
+            let function = &*guard;
+
+            // Call the closure and execute the future
+            let future = function();
+            future.await;
+
+            // Add an assertion to check if the worker name matches
+            assert_eq!(worker.name(), "SyncTestWorker");
+        } else {
+            panic!("Thread worker not found: SyncTestWorker");
+        }
     }
 
     #[tokio::test]
-    async fn test_custom_function_execution_with_dependency_call() {
-        pub struct ClassB;
+    async fn test_save_async_thread_worker() {
+        let repository = ThreadWorkerRepositoryImpl::get_instance();
 
-        impl ClassB {
-            pub fn bcall(&self) {
-                println!("Class B method called");
-            }
-        }
+        // Lock the mutex to access the repository
+        let mut repository = repository.lock().unwrap();
 
-        // Define Class A with a dependency on Class B
-        pub struct ClassA {
-            b_instance: ClassB,
-        }
-
-        impl ClassA {
-            pub fn new() -> Self {
-                ClassA { b_instance: ClassB }
-            }
-
-            pub fn acall(&self) {
-                println!("Class A method called");
-                self.b_instance.bcall();
-            }
-        }
-
-        let custom_function_executed = Arc::new(Mutex::new(false));
-        let custom_function_executed_clone = Arc::clone(&custom_function_executed);
-        let repository = ThreadWorkerRepositoryImpl::new();
-
-        let class_a_instance = ClassA::new();
-
-        let custom_function = move || {
-            let mut lock = custom_function_executed_clone.lock().unwrap();
-            class_a_instance.acall();
-            *lock = true;
+        // Asynchronous function
+        let async_custom_function = || {
+            Box::pin(async {
+                my_async_function().await;
+            }) as Pin<Box<dyn Future<Output = ()>>>
         };
 
+        // Save a thread worker with an asynchronous function
+        repository.save_thread_worker("AsyncTestWorker", Some(Box::new(async_custom_function)));
+
+        // Retrieve and execute the saved worker's function
+        if let Some(worker) = repository.thread_worker_list.get("AsyncTestWorker") {
+            let function_arc = Arc::clone(&worker.get_will_be_execute_function().unwrap());
+
+            // Lock the Mutex to get the guard
+            let guard = function_arc.lock().await;
+
+            // Extract the closure from the Box inside the Mutex guard
+            let function = &*guard;
+
+            // Call the closure and execute the future
+            let future = function();
+            future.await;
+
+            // Add an assertion to check if the worker name matches
+            assert_eq!(worker.name(), "AsyncTestWorker");
+        } else {
+            panic!("Thread worker not found: AsyncTestWorker");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_shared_thread_worker_list() {
+        let instance1 = ThreadWorkerRepositoryImpl::get_instance();
+        let instance2 = ThreadWorkerRepositoryImpl::get_instance();
+
+        // Lock the mutex to access the repository through instance1
+        let mut repository1 = instance1.lock().unwrap();
+
+        // Save a thread worker through instance1
+        repository1.save_thread_worker("SharedTestWorker", None);
+
+        // Drop the lock to allow other instances to access the repository
+        drop(repository1);
+
+        // Lock the mutex to access the repository through instance2
+        let repository2 = instance2.lock().unwrap();
+
+        // Check if the saved worker is visible through instance2
+        assert!(repository2.thread_worker_list.contains_key("SharedTestWorker"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_new_save_thread_worker() {
+        // Execute the async code within the tokio runtime
+        let repository = ThreadWorkerRepositoryImpl::get_instance();
+
+        // Lock the mutex to access the repository
+        let mut repository = repository.lock().unwrap();
+
+        let custom_function = || -> Pin<Box<dyn Future<Output=()>>>   {
+            Box::pin(async {
+                println!("Custom function executed!");
+            })
+        };
+
+        // tokio::runtime::Builder::new_multi_thread()
+        //     .worker_threads(1)
+        //     .enable_all()
+        //     .build()
+        //     .unwrap()
+        //     .block_on(async {
+        //         custom_function
+        //     });
+
+        // Save a thread worker
         repository.save_thread_worker("TestWorker", Some(Box::new(custom_function)));
-        repository.start_thread_worker("TestWorker");
-        let lock = custom_function_executed.lock().unwrap();
-        assert_eq!(*lock, true);
+
+        repository.start_thread_worker("TestWorker").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_new_save_sync_thread_worker() {
+        let repository = ThreadWorkerRepositoryImpl::get_instance();
+
+        // Lock the mutex to access the repository
+        let mut repository = repository.lock().unwrap();
+
+        // Synchronous function
+        let sync_custom_function = || {
+            Box::pin(async {
+                my_sync_function();
+            }) as Pin<Box<dyn Future<Output = ()>>>
+        };
+
+        // Save a thread worker with a synchronous function
+        repository.save_thread_worker("SyncTestWorker", Some(Box::new(sync_custom_function)));
+        repository.start_thread_worker("SyncTestWorker").await;
     }
 }

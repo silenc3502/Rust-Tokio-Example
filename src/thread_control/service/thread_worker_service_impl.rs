@@ -163,7 +163,7 @@ mod tests {
     async fn test_singleton() {
         let instance1 = ThreadWorkerServiceImpl::get_instance();
         let instance2 = ThreadWorkerServiceImpl::get_instance();
-        
+
         assert_eq!(Arc::ptr_eq(&instance1, &instance2), true);
     }
 

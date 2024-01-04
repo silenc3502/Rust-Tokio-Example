@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::future::Future;
-use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
@@ -56,29 +55,18 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
             if let Some(function_arc_ref) = worker.get_will_be_execute_function_ref() {
                 // function_arc_ref의 타입: &Arc<Mutex<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>>
                 let guard = function_arc_ref.lock().await;
-                let box_function = &guard;
 
-                let fucking_gpt_test = &*guard;
-                let shit_gpt_test= &**fucking_gpt_test;
+                let guard_deref = &*guard;
+                let real_function = &**guard_deref;
 
-                // &dyn Fn()
-                // let closure: &dyn Fn() = &*guard;
+                let future = real_function();
 
-                // custom_function: fn() -> Pin<Box<dyn Future<Output=()>>>
-                //                          Pin<Box<dyn Future<Output=()>>>
-                // let future: &dyn Fn() = shit_gpt_test();
-                // future;
-
-                let future = shit_gpt_test();
-                // let runtime = tokio::runtime::Runtime::new().unwrap();
-                // runtime.block_on(future);
                 task::block_in_place(move || {
                     Handle::current().block_on(async move {
                         future.await
                     });
                 });
 
-                // Add an assertion to check if the worker name matches
                 assert_eq!(worker.name(), name);
             } else {
                 panic!("Thread worker function not found: {}", name);

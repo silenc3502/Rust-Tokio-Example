@@ -1,11 +1,10 @@
-use std::sync::{Arc, Mutex, Once};
+use std::sync::Arc;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tokio::sync::Mutex as AsyncMutex;
 use crate::client_socket_accept::controller::client_socket_accept_controller::ClientSocketAcceptController;
 use crate::client_socket_accept::service::client_socket_accept_service::ClientSocketAcceptService;
 use crate::client_socket_accept::service::client_socket_accept_service_impl::ClientSocketAcceptServiceImpl;
-use crate::server_socket::repository::ServerSocketRepositoryImpl::ServerSocketRepositoryImpl;
 
 #[derive(Clone)]
 pub struct ClientSocketAcceptControllerImpl {
@@ -42,8 +41,8 @@ impl ClientSocketAcceptController for ClientSocketAcceptControllerImpl {
 mod tests {
     use super::*;
     use tokio::time::Duration;
-    use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
-    use crate::server_socket::repository::ServerSocketRepositoryImpl::ServerSocketRepositoryImpl;
+    use crate::server_socket::repository::server_socket_repository::ServerSocketRepository;
+    use crate::server_socket::repository::server_socket_repository_impl::ServerSocketRepositoryImpl;
 
 
     #[tokio::test]
@@ -81,9 +80,6 @@ mod tests {
     async fn test_get_client_socket_accept_controller() {
         let controller1_mutex = ClientSocketAcceptControllerImpl::get_instance();
         let controller2_mutex = ClientSocketAcceptControllerImpl::get_instance();
-
-        let controller1_guard = controller1_mutex.lock().await;
-        let controller2_guard = controller2_mutex.lock().await;
 
         assert!(Arc::ptr_eq(&controller1_mutex, &controller2_mutex));
     }

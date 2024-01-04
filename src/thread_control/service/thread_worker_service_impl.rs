@@ -67,10 +67,12 @@ mod tests {
     use super::*;
     use tokio::test;
 
+    #[allow(dead_code)]
     fn my_sync_function() {
         println!("Synchronous function is executed!");
     }
 
+    #[allow(dead_code)]
     async fn my_async_function() {
         println!("Asynchronous function is executed!");
     }

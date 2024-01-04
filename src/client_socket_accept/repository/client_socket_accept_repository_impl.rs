@@ -79,7 +79,7 @@ mod tests {
         let repository = ClientSocketAcceptRepositoryImpl::get_instance();
         let listener_clone = listener.clone();
 
-        let thread_object = tokio::spawn(async move {
+        tokio::spawn(async move {
             let repository_gaurd = repository.lock().await;
             repository_gaurd.accept_client(&listener_clone).await;
         });

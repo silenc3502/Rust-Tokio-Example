@@ -161,11 +161,9 @@ mod tests {
 
     #[test]
     async fn test_singleton() {
-        // Arrange
         let instance1 = ThreadWorkerServiceImpl::get_instance();
         let instance2 = ThreadWorkerServiceImpl::get_instance();
-
-        // Ensure that both instances are the same
+        
         assert_eq!(Arc::ptr_eq(&instance1, &instance2), true);
     }
 
@@ -180,7 +178,6 @@ mod tests {
             })
         };
 
-        // Act
         service.save_sync_thread_worker("SyncTestWorker", Arc::new(Mutex::new(sync_custom_function)));
         service.start_thread_worker("SyncTestWorker").await;
     }

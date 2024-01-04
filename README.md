@@ -11,7 +11,7 @@ It's for Rust Tokio Example
     //     .expect("Failed to connect to Redis with password");
     //
     // let _: () = redis::cmd("AUTH")
-    //     .arg("eddi@123")
+    //     .arg("password")
     //     .query(&mut connection)
     //     .expect("Failed to authenticate to Redis");
     //

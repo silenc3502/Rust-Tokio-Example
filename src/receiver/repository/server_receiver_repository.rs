@@ -3,5 +3,5 @@ use tokio::net::TcpStream;
 
 #[async_trait]
 pub trait ServerReceiverRepository {
-    async fn receive(&self, stream: TcpStream);
+    async fn receive(&mut self, stream: TcpStream);
 }

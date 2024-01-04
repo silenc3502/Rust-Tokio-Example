@@ -70,7 +70,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_bind_socket() {
-        // let repository = Arc::new(Mutex::new(ServerSocketRepositoryImpl::new()));
         let repository_mutex = ServerSocketRepositoryImpl::get_instance();
         let mut repository_guard = repository_mutex.lock().await;
         let address = "127.0.0.1:37373";
@@ -82,12 +81,10 @@ mod tests {
                     let bound_address = listener_mutex.local_addr().unwrap();
                     assert_eq!(bound_address.to_string(), address);
                 } else {
-                    // Listener is not present after successful bind
                     panic!("Listener not found after successful bind");
                 }
             }
             Err(err) => {
-                // The bind_socket method returned an error
                 panic!("Error binding socket: {:?}", err);
             }
         }

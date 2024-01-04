@@ -120,13 +120,9 @@ mod tests {
         assert_eq!(found_function.is_some(), true);
 
         if let Some(arc_function) = found_function {
-            // Unwrap the Arc and lock the Mutex
             let guard = arc_function.lock().await;
-
-            // Extract the closure from the Box
             let function = &*guard;
 
-            // Call the closure and execute the future
             let future = (function as &dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>)();
             future.await;
         } else {
@@ -148,13 +144,9 @@ mod tests {
         assert_eq!(found_function.is_some(), true);
 
         if let Some(arc_function) = found_function {
-            // Unwrap the Arc and lock the Mutex
             let guard = arc_function.lock().await;
-
-            // Extract the closure from the Box
             let function = &*guard;
 
-            // Call the closure and execute the future
             let future = function();
             future.await;
         } else {
@@ -164,7 +156,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_my_sync_function() {
-        // Use Box::pin(async {}) to wrap the synchronous function call in an asynchronous block
         let custom_function = || -> Pin<Box<dyn Future<Output = ()>>> {
             Box::pin(async {
                 my_sync_function();
@@ -175,11 +166,8 @@ mod tests {
 
         if let Some(arc_function) = worker.get_will_be_execute_function() {
             let guard = arc_function.lock().await;
-
-            // Extract the closure from the Box
             let function = &*guard;
 
-            // Call the closure and execute the future
             let future = function();
             future.await;
         } else {
@@ -197,16 +185,12 @@ mod tests {
 
         if let Some(arc_function) = worker.get_will_be_execute_function() {
             let guard = arc_function.lock().await;
-
-            // Extract the closure from the Box
             let function = &*guard;
 
-            // Call the closure and execute the future
             let future = function();
             future.await;
         } else {
             println!("No custom function found!");
         }
     }
-
 }

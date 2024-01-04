@@ -71,14 +71,10 @@ mod tests {
 
             drop(server_socket_service_guard);
 
-            // Call accept_client on the controller
             client_socket_accept_controlelr_gaurd.accept_client().await;
         });
 
-        // Sleep for a short duration to allow the async method to run
         tokio::time::sleep(Duration::from_secs(5)).await;
-
-        // The test passes if it reaches this point without panicking
     }
 
     #[tokio::test]

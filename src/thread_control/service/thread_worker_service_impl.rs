@@ -79,7 +79,6 @@ mod tests {
     async fn test_save_async_thread_worker() {
         let thread_worker_repository = ThreadWorkerRepositoryImpl::get_instance();
         let mut service = ThreadWorkerServiceImpl::new(thread_worker_repository);
-        // let mut service = ThreadWorkerServiceImpl::get_instance();
 
         let async_function = || -> Pin<Box<dyn Future<Output = ()>>> {
             Box::pin(async {
@@ -89,21 +88,14 @@ mod tests {
 
         service.save_async_thread_worker("AsyncTestWorker", Arc::new(Mutex::new(async_function)));
 
-        // Retrieve the saved worker and execute its function
         if let Some(worker) = service.repository.lock().unwrap().find_by_name("AsyncTestWorker") {
             let function_arc = Arc::clone(&worker.get_will_be_execute_function().unwrap());
-
-            // Lock the Mutex to get the guard
             let guard = function_arc.lock().await;
-
-            // Extract the closure from the Box inside the Mutex guard
             let function = &*guard;
 
-            // Call the closure and execute the future
             let future = function();
             future.await;
 
-            // Add an assertion to check if the worker name matches
             assert_eq!(worker.name(), "AsyncTestWorker");
         } else {
             panic!("Thread worker not found: AsyncTestWorker");
@@ -123,21 +115,14 @@ mod tests {
 
         service.save_sync_thread_worker("SyncTestWorker", Arc::new(Mutex::new(sync_function)));
 
-        // Retrieve the saved worker and execute its function
         if let Some(worker) = service.repository.lock().unwrap().find_by_name("SyncTestWorker") {
             let function_arc = Arc::clone(&worker.get_will_be_execute_function().unwrap());
-
-            // Lock the Mutex to get the guard
             let guard = function_arc.lock().await;
-
-            // Extract the closure from the Box inside the Mutex guard
             let function = &*guard;
 
-            // Call the closure and execute the future
             let future = function();
             future.await;
 
-            // Add an assertion to check if the worker name matches
             assert_eq!(worker.name(), "SyncTestWorker");
         } else {
             panic!("Thread worker not found: SyncTestWorker");
@@ -148,7 +133,6 @@ mod tests {
     async fn test_save_async_thread_and_start() {
         let thread_worker_repository = ThreadWorkerRepositoryImpl::get_instance();
         let mut service = ThreadWorkerServiceImpl::new(thread_worker_repository);
-        // let mut service = ThreadWorkerServiceImpl::get_instance();
 
         let async_function = || -> Pin<Box<dyn Future<Output = ()>>> {
             Box::pin(async {
@@ -187,11 +171,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_save_sync_thread_and_start_with_singleton() {
-        // Arrange
         let service_instance = ThreadWorkerServiceImpl::get_instance();
         let mut service = service_instance.lock().unwrap();
 
-        // Synchronous function
         let sync_custom_function = || -> Pin<Box<dyn Future<Output = ()>>> {
             Box::pin(async {
                 println!("Custom sync function executed!");

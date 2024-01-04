@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use crate::client_socket_accept::controller::client_socket_accept_controller::ClientSocketAcceptController;
 use crate::client_socket_accept::controller::client_socket_accept_controller_impl::ClientSocketAcceptControllerImpl;
+use crate::receiver::repository::server_receiver_repository::ServerReceiverRepository;
+use crate::receiver::repository::server_receiver_repository_impl::ServerReceiverRepositoryImpl;
 use crate::server_socket::service::server_socket_service::ServerSocketService;
 use crate::server_socket::service::server_socket_service_impl::ServerSocketServiceImpl;
 use crate::thread_control::service::thread_worker_service::ThreadWorkerServiceTrait;
@@ -26,6 +28,8 @@ async fn main() {
     domain_initializer.init_server_socket_domain();
     domain_initializer.init_thread_control_domain();
     domain_initializer.init_client_socket_accept_domain();
+    // TODO: Receiver Domain 개선하면 적용 필요함
+    domain_initializer.init_receiver_domain();
 
     let server_socket_service = ServerSocketServiceImpl::get_instance();
 
@@ -59,6 +63,17 @@ async fn main() {
 
     thread_worker_service_guard.save_async_thread_worker("Acceptor", Arc::new(Mutex::new(acceptor_function)));
     thread_worker_service_guard.start_thread_worker("Acceptor").await;
+
+    // TODO: Receiver 또한 Domain 구성이 필요하나 현재 급하니까 그냥 감 (Acceptor에서 컨셉 검증은 완료함)
+    // let receiver_function = || -> Pin<Box<dyn Future<Output = ()>>> {
+    //     Box::pin(async {
+    //         let receiver_mutex = ServerReceiverRepositoryImpl::get_instance();
+    //         let mut receiver_guard = receiver_mutex.lock().await;
+    //         println!("Receiver instance found. Executing receive().");
+    //         receiver_guard.receive().await;
+    //         println!("accept_client() executed successfully.");
+    //     })
+    // };
 
     loop {
         tokio::time::sleep(Duration::from_secs(10)).await;

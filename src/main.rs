@@ -3,6 +3,7 @@ mod server_socket;
 mod utility;
 mod thread_control;
 mod client_socket_accept;
+mod receiver;
 
 
 use std::future::Future;
@@ -43,8 +44,6 @@ async fn main() {
 
     drop(server_socket_service_guard);
 
-
-
     let acceptor_function = || -> Pin<Box<dyn Future<Output = ()>>> {
         Box::pin(async {
             let client_socket_accept_controller = ClientSocketAcceptControllerImpl::get_instance();
@@ -54,8 +53,6 @@ async fn main() {
             println!("accept_client() executed successfully.");
         })
     };
-
-
 
     let thread_worker_service = ThreadWorkerServiceImpl::get_instance();
     let mut thread_worker_service_guard = thread_worker_service.lock().unwrap();

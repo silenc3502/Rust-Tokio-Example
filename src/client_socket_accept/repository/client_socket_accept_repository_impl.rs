@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use tokio::net::TcpListener;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
@@ -53,30 +54,11 @@ impl ClientSocketAcceptRepository for ClientSocketAcceptRepositoryImpl {
                     eprintln!("Error accepting client: {:?}", err);
                 }
             }
+
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
     }
 }
-
-// lazy_static! {
-//     static ref CLIENT_SOCKET_ACCEPT_REPOSITORY: Mutex<Option<Arc<ClientSocketAcceptRepositoryImpl>>> = Mutex::new(None);
-//     static ref INIT: Once = Once::new();
-// }
-//
-// impl ClientSocketAcceptRepositoryImpl {
-//     pub fn get_instance() -> Arc<ClientSocketAcceptRepositoryImpl> {
-//         INIT.call_once(|| {
-//             let repository = ClientSocketAcceptRepositoryImpl::new();
-//             *CLIENT_SOCKET_ACCEPT_REPOSITORY.lock().unwrap() = Some(Arc::new(repository));
-//         });
-//
-//         CLIENT_SOCKET_ACCEPT_REPOSITORY
-//             .lock()
-//             .unwrap()
-//             .as_ref()
-//             .unwrap()
-//             .clone()
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -97,12 +79,11 @@ mod tests {
         let repository = ClientSocketAcceptRepositoryImpl::get_instance();
         let listener_clone = listener.clone();
 
-        tokio::spawn(async move {
+        let thread_object = tokio::spawn(async move {
             let repository_gaurd = repository.lock().await;
             repository_gaurd.accept_client(&listener_clone).await;
         });
 
-        // tokio::time::sleep(Duration::from_millis(100)).await;
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         assert!(listener.local_addr().is_ok());

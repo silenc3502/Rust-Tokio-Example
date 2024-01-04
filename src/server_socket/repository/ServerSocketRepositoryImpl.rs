@@ -1,5 +1,5 @@
 use tokio::net::TcpListener;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
@@ -66,7 +66,6 @@ impl ServerSocketRepository for ServerSocketRepositoryImpl {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::time::Duration;
     use super::*;
 
     #[tokio::test]

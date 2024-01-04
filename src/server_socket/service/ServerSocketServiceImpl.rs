@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 use lazy_static::lazy_static;
 use tokio::net::TcpListener;
 use crate::server_socket::repository::ServerSocketRepository::ServerSocketRepository;
 use crate::server_socket::repository::ServerSocketRepositoryImpl::ServerSocketRepositoryImpl;
 use crate::server_socket::service::ServerSocketService::ServerSocketService;
-use crate::thread_control::repository::thread_worker_repository_impl::ThreadWorkerRepositoryImpl;
 
 #[derive(Clone)]
 pub struct ServerSocketServiceImpl {
@@ -52,8 +51,6 @@ impl AsRef<ServerSocketRepositoryImpl> for ServerSocketRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-    use std::sync::Arc;
     use super::*;
 
     #[tokio::test]
@@ -61,7 +58,6 @@ mod tests {
         let service = ServerSocketServiceImpl::get_instance();
         let address = "127.0.0.1:27373";
 
-        // Lock the mutex to get a mutable reference to ServerSocketServiceImpl
         let mut service_guard = service.lock().await;
 
         assert!(service_guard.server_socket_bind(address).await.is_ok());

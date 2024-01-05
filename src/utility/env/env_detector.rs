@@ -33,6 +33,4 @@ mod tests {
 
         assert_eq!(EnvDetector::get_port(), Some("1234".to_string()));
     }
-
-    // 다른 키에 대한 테스트도 필요에 따라 추가 가능
 }

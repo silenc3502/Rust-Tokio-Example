@@ -1,40 +1,44 @@
 use tokio::sync::{mpsc, Mutex};
 use futures::future::err;
 
-macro_rules! define_channel {
-    ($struct_name:ident, $type:ty) => {
-        struct $struct_name {
-            sender: mpsc::Sender<$type>,
-            receiver: Mutex<mpsc::Receiver<$type>>,
-        }
-
-        impl $struct_name {
-            fn new(capacity: usize) -> Self {
-                let (sender, receiver) = tokio::sync::mpsc::channel::<$type>(capacity);
-                $struct_name { sender, receiver: Mutex::new(receiver) }
+pub mod mpsc_channel {
+    #[macro_export]
+    macro_rules! define_channel {
+        ($struct_name:ident, $type:ty) => {
+            struct $struct_name {
+                sender: mpsc::Sender<$type>,
+                receiver: Mutex<mpsc::Receiver<$type>>,
             }
 
-            async fn send(&self, value: $type) {
-                if let Err(err) = self.sender.send(value).await {
-                    eprintln!("Error sending message: {}", err);
+            impl $struct_name {
+                fn new(capacity: usize) -> Self {
+                    let (sender, receiver) = tokio::sync::mpsc::channel::<$type>(capacity);
+                    $struct_name { sender, receiver: Mutex::new(receiver) }
+                }
+
+                async fn send(&self, value: $type) {
+                    if let Err(err) = self.sender.send(value).await {
+                        eprintln!("Error sending message: {}", err);
+                    }
+                }
+
+                async fn receive(&self) -> Option<$type> {
+                    self.receiver.lock().await.recv().await
                 }
             }
 
-            async fn receive(&self) -> Option<$type> {
-                self.receiver.lock().await.recv().await
-            }
-        }
-
-        impl Clone for $struct_name {
-            fn clone(&self) -> Self {
-                let (sender, receiver) = tokio::sync::mpsc::channel::<$type>(self.sender.capacity());
-                $struct_name {
-                    sender,
-                    receiver: Mutex::new(receiver),
+            impl Clone for $struct_name {
+                fn clone(&self) -> Self {
+                    let (sender, receiver) = tokio::sync::mpsc::channel::<$type>(self.sender.capacity());
+                    $struct_name {
+                        sender,
+                        receiver: Mutex::new(receiver),
+                    }
                 }
             }
-        }
-    };
+        };
+    }
+    pub use crate::define_channel;
 }
 
 #[cfg(test)]
@@ -44,6 +48,7 @@ mod tests {
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
+    pub use crate::utility::mpsc::mpsc_creator::mpsc_channel::define_channel;
 
     #[tokio::test]
     async fn test_socket_communication() {

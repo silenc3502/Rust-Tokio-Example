@@ -27,7 +27,7 @@ async fn main() {
     let domain_initializer = DomainInitializer;
     domain_initializer.init_server_socket_domain();
     domain_initializer.init_thread_control_domain();
-    domain_initializer.init_client_socket_accept_domain();
+    // domain_initializer.init_client_socket_accept_domain();
     // TODO: Receiver Domain 개선하면 적용 필요함
     domain_initializer.init_receiver_domain();
 

@@ -1,4 +1,4 @@
 pub mod initializer;
-pub mod mpsc;
 pub mod ip_address;
-mod env;
+pub mod env;
+pub mod mpsc;

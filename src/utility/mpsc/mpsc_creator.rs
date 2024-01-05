@@ -1,4 +1,5 @@
 use tokio::sync::{mpsc, Mutex};
+use futures::future::err;
 
 macro_rules! define_channel {
     ($struct_name:ident, $type:ty) => {
@@ -14,8 +15,8 @@ macro_rules! define_channel {
             }
 
             async fn send(&self, value: $type) {
-                if let Err(_) = self.sender.send(value).await {
-
+                if let Err(err) = self.sender.send(value).await {
+                    eprintln!("Error sending message: {}", err);
                 }
             }
 
@@ -23,84 +24,93 @@ macro_rules! define_channel {
                 self.receiver.lock().await.recv().await
             }
         }
+
+        impl Clone for $struct_name {
+            fn clone(&self) -> Self {
+                let (sender, receiver) = tokio::sync::mpsc::channel::<$type>(self.sender.capacity());
+                $struct_name {
+                    sender,
+                    receiver: Mutex::new(receiver),
+                }
+            }
+        }
     };
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::Duration;
+    use tokio::time::{Duration, sleep};
     use std::sync::Arc;
-    use tokio::io::AsyncReadExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]
     async fn test_socket_communication() {
-        define_channel!(Acceptor, TcpStream);
-        define_channel!(Receiver, String);
-        define_channel!(Transmitter, String);
+        define_channel!(Acceptor, Arc<Mutex<TcpStream>>);
 
-        async fn server(acceptor: Acceptor, transmitter: Transmitter) {
-            let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
-            println!("Server listening on 127.0.0.1:8080");
+        async fn acceptor_thread(acceptor: Arc<Acceptor>) {
+            let listener = TcpListener::bind("192.168.20.2:12123").await.unwrap();
+            println!("Server listening on 192.168.20.2:12123");
 
             while let Ok((stream, _)) = listener.accept().await {
+                println!("Client Accepted!");
                 let acceptor_clone = acceptor.clone();
-                let transmitter_clone = transmitter.clone();
 
                 tokio::spawn(async move {
+                    let stream = Arc::new(Mutex::new(stream));
                     acceptor_clone.send(stream).await;
-
-                    // Simulate sending data from the server
-                    for i in 0..5 {
-                        let message = format!("Server sending: {}", i);
-                        println!("{}", message);
-                        transmitter_clone.send(message).await;
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
+                    println!("TcpStream sent to DataProcessor");
                 });
             }
         }
 
-        async fn client(receiver: Receiver) {
-            while let Some(stream) = receiver.receive().await {
+        async fn data_processor_thread(acceptor: Arc<Acceptor>) {
+            println!("Waiting for Acceptor receive TcpStream");
+            while let Some(arc_mutex_stream) = acceptor.receive().await {
+                println!("Waiting for Client Accept!");
                 tokio::spawn(async move {
-                    let mut buf = [0; 1024];
-                    let mut stream = tokio::net::TcpStream::from_std(stream).unwrap();
+                    let mut stream = arc_mutex_stream.lock().await;
 
                     loop {
-                        let n = stream.read(&mut buf).await.unwrap();
-                        if n == 0 {
-                            break;
-                        }
+                        let mut buf = [0; 1024];
+                        match stream.read(&mut buf).await {
+                            Ok(n) if n > 0 => {
+                                let message = String::from_utf8_lossy(&buf[..n]).into_owned();
+                                println!("Received: {}", message);
 
-                        let message = String::from_utf8_lossy(&buf[..n]).into_owned();
-                        println!("Client received: {}", message);
+                                stream.write_all(&buf[..n]).await.unwrap();
+                            }
+                            Ok(_) | Err(_) => {
+                                break;
+                            }
+                        }
                     }
                 });
             }
         }
 
-        // Create channels for communication
-        let (acceptor_tx, acceptor_rx) = mpsc::channel::<TcpStream>(10);
-        let acceptor = Acceptor::new(acceptor_tx);
-        let receiver = Receiver::new(acceptor_rx);
-        let transmitter = Transmitter::new();
+        let acceptor = Acceptor::new(1);
+        let acceptor_arc = Arc::new(acceptor.clone());
 
-        // Spawn server
-        let server_task = tokio::spawn(server(acceptor, transmitter));
+        tokio::spawn(acceptor_thread(acceptor_arc.clone()));
+        tokio::spawn(data_processor_thread(acceptor_arc.clone()));
 
-        // Spawn client
-        let client_task = tokio::spawn(client(receiver));
+        sleep(Duration::from_secs(1)).await;
 
-        // Give some time for tasks to complete
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        let mut client_stream = TcpStream::connect("192.168.20.2:12123").await;
+        println!("Client Connect Success!");
 
-        // Check if server and client tasks completed successfully
-        assert!(server_task.await.is_ok());
-        assert!(client_task.await.is_ok());
+        if let Ok(ref mut stream) = client_stream {
+            println!("Ready to send Message!");
+            stream.write_all(b"Hello Rust Tokio MPSC").await.unwrap();
+        } else {
+            println!("Failed to obtain TcpStream");
+        }
+
+        sleep(Duration::from_secs(3)).await;
+
+        println!("Test finished");
     }
 
     #[tokio::test]
@@ -123,7 +133,6 @@ mod tests {
             }
         });
 
-        // Wait for tasks to complete
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }

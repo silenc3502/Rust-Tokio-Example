@@ -1,11 +1,13 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tokio::runtime::Handle;
+use tokio::sync::Mutex;
 use tokio::task;
-use crate::thread_control::repository::thread_worker_repository::ThreadWorkerRepositoryTrait;
+use tokio::task::spawn_local;
+use crate::thread_control::repository::thread_worker_repository::{CloneFunction, ThreadWorkerRepositoryTrait};
 use crate::thread_control::repository::thread_worker_repository_impl::ThreadWorkerRepositoryImpl;
 use crate::thread_control::service::thread_worker_service::ThreadWorkerServiceTrait;
 
@@ -29,35 +31,33 @@ impl ThreadWorkerServiceImpl {
 
 #[async_trait]
 impl ThreadWorkerServiceTrait for ThreadWorkerServiceImpl {
-    fn save_async_thread_worker(&mut self, name: &str, will_be_execute_function: Arc<Mutex<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>) {
-        let async_function = move || -> Pin<Box<dyn Future<Output = ()>>> {
-            let will_be_execute_function = Arc::clone(&will_be_execute_function);
-            Box::pin(async move {
-                (will_be_execute_function.lock().unwrap())().await
-            })
-        };
+    async fn save_async_thread_worker(&mut self, name: &str, will_be_execute_function: Arc<Mutex<dyn CloneFunction>>) {
+        let mut repository_mutex = self.repository.lock().await;
 
-        self.repository.lock().unwrap().save_thread_worker(name, Some(Box::new(async_function)));
+        repository_mutex.save_thread_worker(name, will_be_execute_function);
     }
 
-    fn save_sync_thread_worker(&mut self, name: &str, will_be_execute_function: Arc<Mutex<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>) {
-        let sync_function = move || -> Pin<Box<dyn Future<Output = ()>>> {
-            let will_be_execute_function = Arc::clone(&will_be_execute_function);
-            Box::pin(async move {
-                (will_be_execute_function.lock().unwrap())().await
-            })
-        };
-
-        self.repository.lock().unwrap().save_thread_worker(name, Some(Box::new(sync_function)));
-    }
+    // fn save_sync_thread_worker(&mut self, name: &str, will_be_execute_function: Arc<Mutex<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>) {
+    //     let sync_function = move || -> Pin<Box<dyn Future<Output = ()>>> {
+    //         let will_be_execute_function = Arc::clone(&will_be_execute_function);
+    //         Box::pin(async move {
+    //             (will_be_execute_function.lock().unwrap())().await
+    //         })
+    //     };
+    //
+    //     self.repository.lock().unwrap().save_thread_worker(name, Some(Box::new(sync_function)));
+    // }
 
     async fn start_thread_worker(&self, name: &str) {
-        let repository_lock = self.repository.lock().unwrap();
+        let repository_clone = Arc::clone(&self.repository);
 
-        task::block_in_place(move || {
-            Handle::current().block_on(async move {
-                repository_lock.start_thread_worker(name).await;
-            });
+        // Spawn a tokio task
+        tokio::task::spawn(async move {
+            // Lock the mutex and execute the method
+            let arc_repo_clone = Arc::new(repository_clone);
+            let repo_clone = arc_repo_clone.lock().await;
+            repo_clone.start_thread_worker(name).await;
+            // The lock is automatically released when the task completes
         });
     }
 }

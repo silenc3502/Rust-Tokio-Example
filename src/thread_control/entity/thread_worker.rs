@@ -6,22 +6,25 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
+// TODO: ugly code
+use crate::thread_control::repository::thread_worker_repository::CloneFunction;
+
 #[derive(Clone)]
 pub struct ThreadWorker {
     name: String,
-    will_be_execute_function: Option<Arc<Mutex<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send + 'static>>>>,
+    will_be_execute_function: Option<Arc<Mutex<dyn CloneFunction>>>,
 }
 
 impl ThreadWorker {
     pub fn new(
         name: &str,
-        will_be_execute_function: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send + 'static>>,
+        will_be_execute_function: Arc<Mutex<dyn CloneFunction>>,
     ) -> Self {
-        let arc_function = will_be_execute_function.map(|func| Arc::new(Mutex::new(func)));
+        //let arc_function = will_be_execute_function.map(|func| Arc::new(Mutex::new(func)));
 
         ThreadWorker {
             name: name.to_string(),
-            will_be_execute_function: arc_function,
+            will_be_execute_function: Some(will_be_execute_function),
         }
     }
 
@@ -31,11 +34,11 @@ impl ThreadWorker {
 
     pub fn get_will_be_execute_function(
         &self,
-    ) -> Option<Arc<Mutex<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>>> {
+    ) -> Option<Arc<Mutex<dyn CloneFunction>>> {
         self.will_be_execute_function.clone()
     }
 
-    pub fn get_will_be_execute_function_ref(&self) -> Option<&Arc<Mutex<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>>> {
+    pub fn get_will_be_execute_function_ref(&self) -> Option<&Arc<Mutex<dyn CloneFunction>>> {
         self.will_be_execute_function.as_ref()
     }
 }

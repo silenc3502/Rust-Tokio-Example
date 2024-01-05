@@ -3,24 +3,35 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tokio::runtime::Handle;
+use tokio::sync::Mutex;
 use tokio::task;
 use crate::thread_control::entity::thread_worker::ThreadWorker;
-use crate::thread_control::repository::thread_worker_repository::ThreadWorkerRepositoryTrait;
+use crate::thread_control::repository::thread_worker_repository::{CloneFunction, ThreadWorkerRepositoryTrait};
 
-trait CloneFunction: Send {
-    fn call(&self) -> Pin<Box<dyn Future<Output = ()>>>;
+impl dyn CloneFunction {
+    fn boxed_clone_function<F, Fut>(func: F) -> Box<dyn CloneFunction>
+        where
+            F: 'static + Fn() -> Fut + Send,
+            Fut: Future<Output = ()> + Send + 'static,
+    {
+        Box::new(Arc::new(Mutex::new(func))) as Box<dyn CloneFunction>
+    }
 }
 
-impl<T> CloneFunction for T
+#[async_trait]
+impl<F, Fut> CloneFunction for Arc<Mutex<F>>
     where
-        T: 'static + Fn() -> Pin<Box<dyn futures::Future<Output = ()>>> + Send,
+        F: 'static + Fn() -> Fut + Send,
+        Fut: Future<Output = ()> + Send + 'static,
 {
-    fn call(&self) -> Pin<Box<dyn futures::Future<Output = ()>>> {
-        (self)()
+    async fn call(&self) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        let guard = self.lock().await;
+        let future = (guard)();
+        Box::pin(future)
     }
 }
 
@@ -53,7 +64,7 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
     fn save_thread_worker(
         &mut self,
         name: &str,
-        will_be_execute_function: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send + 'static>>,
+        will_be_execute_function: Arc<Mutex<dyn CloneFunction>>,
     ) {
         let thread_worker = ThreadWorker::new(name, will_be_execute_function);
         self.thread_worker_list.insert(name.to_string(), thread_worker);
@@ -63,7 +74,7 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
         self.thread_worker_list.get(name).cloned()
     }
 
-    async fn start_thread_worker(&self, name: &str) {
+    async fn start_thread_worker(&'static self, name: &str) {
         let thread_worker_list = self.get_thread_worker_list();
 
         if let Some(worker) = thread_worker_list.get(name) {
@@ -71,17 +82,17 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
                 // function_arc_ref의 타입: &Arc<Mutex<Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>> + Send>>>
                 let guard = function_arc_ref.lock().await;
 
-                let guard_deref = &*guard;
-                let real_function = &**guard_deref;
-
-                // 1.
-                let future = real_function();
-
-                task::block_in_place(move || {
-                    Handle::current().block_on(async move {
-                        future.await
-                    });
-                });
+                // let guard_deref = &*guard;
+                // let real_function = &**guard_deref;
+                //
+                // // 1.
+                // let future = real_function();
+                //
+                // task::block_in_place(move || {
+                //     Handle::current().block_on(async move {
+                //         future.await
+                //     });
+                // });
 
                 // 2.
                 // let function = function_arc_ref.lock().await.clone();
@@ -97,6 +108,21 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
                 //     let function = CloneFunction::clone_function(guard.as_ref());
                 //     function().await;
                 // }).await.unwrap();
+
+                // 4.
+
+                let cloned_name = name.to_string(); // Clone the name
+
+                task::spawn(async move {
+                    let guard = function_arc_ref.lock().await;
+                    let future = guard.call();
+
+                    future.await;
+
+                    assert_eq!(worker.name(), cloned_name); // Use cloned_name here
+                })
+                    .await
+                    .expect("TODO: panic message");
 
                 assert_eq!(worker.name(), name);
             } else {

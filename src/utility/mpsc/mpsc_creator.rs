@@ -5,24 +5,24 @@ pub mod mpsc_channel {
     #[macro_export]
     macro_rules! define_channel {
         ($struct_name:ident, $type:ty) => {
-            struct $struct_name {
+            pub struct $struct_name {
                 sender: mpsc::Sender<$type>,
                 receiver: Mutex<mpsc::Receiver<$type>>,
             }
 
             impl $struct_name {
-                fn new(capacity: usize) -> Self {
+                pub fn new(capacity: usize) -> Self {
                     let (sender, receiver) = tokio::sync::mpsc::channel::<$type>(capacity);
                     $struct_name { sender, receiver: Mutex::new(receiver) }
                 }
 
-                async fn send(&self, value: $type) {
+                pub async fn send(&self, value: $type) {
                     if let Err(err) = self.sender.send(value).await {
                         eprintln!("Error sending message: {}", err);
                     }
                 }
 
-                async fn receive(&self) -> Option<$type> {
+                pub async fn receive(&self) -> Option<$type> {
                     self.receiver.lock().await.recv().await
                 }
             }

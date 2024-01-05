@@ -6,6 +6,10 @@ use crate::client_socket_accept::controller::client_socket_accept_controller::Cl
 use crate::client_socket_accept::service::client_socket_accept_service::ClientSocketAcceptService;
 use crate::client_socket_accept::service::client_socket_accept_service_impl::ClientSocketAcceptServiceImpl;
 
+// TODO: mpsc channel이니까 매크로 위치에 배치하는 것이 좋을까 ?
+// initializer에서 mpsc channel을 생성함
+use crate::utility::initializer::AcceptorChannel;
+
 #[derive(Clone)]
 pub struct ClientSocketAcceptControllerImpl {
     service: Arc<AsyncMutex<ClientSocketAcceptServiceImpl>>,
@@ -35,6 +39,11 @@ impl ClientSocketAcceptController for ClientSocketAcceptControllerImpl {
         let client_socket_accept_guard = self.service.lock().await;
         client_socket_accept_guard.accept_client().await;
     }
+
+    async fn inject_accept_channel(&self, acceptor_channel_arc: Arc<AcceptorChannel>) {
+        let client_socket_accept_service_guard = self.service.lock().await;
+        client_socket_accept_service_guard.inject_accept_channel(acceptor_channel_arc).await;
+    }
 }
 
 #[cfg(test)]
@@ -47,6 +56,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_controller_singleton_behavior() {
+        let acceptor_channel = AcceptorChannel::new(1);
+        let acceptor_channel_arc = Arc::new(acceptor_channel.clone());
+
         let controller1 = ClientSocketAcceptControllerImpl::get_instance();
         let controller2 = ClientSocketAcceptControllerImpl::get_instance();
 
@@ -55,6 +67,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_controller_accept_client() {
+        let acceptor_channel = AcceptorChannel::new(1);
+        let acceptor_channel_arc = Arc::new(acceptor_channel.clone());
+
         let client_socket_accept_controller_mutex = ClientSocketAcceptControllerImpl::get_instance();
         let server_socket_service_mutex = ServerSocketRepositoryImpl::get_instance();
 
@@ -78,6 +93,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_client_socket_accept_controller() {
+        let acceptor_channel = AcceptorChannel::new(1);
+        let acceptor_channel_arc = Arc::new(acceptor_channel.clone());
+
         let controller1_mutex = ClientSocketAcceptControllerImpl::get_instance();
         let controller2_mutex = ClientSocketAcceptControllerImpl::get_instance();
 

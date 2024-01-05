@@ -2,21 +2,24 @@ use std::collections::HashMap;
 use tokio::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, Mutex};
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use crate::client_socket_accept::entity::client_socket::ClientSocket;
 use crate::client_socket_accept::repository::client_socket_accept_repository::ClientSocketAcceptRepository;
+use crate::utility::initializer::AcceptorChannel;
 
 #[derive(Clone)]
 pub struct ClientSocketAcceptRepositoryImpl {
     client_list: Arc<AsyncMutex<HashMap<String, ClientSocket>>>,
+    acceptor_channel_arc: Option<Arc<AcceptorChannel>>,
 }
 
 impl ClientSocketAcceptRepositoryImpl {
     pub fn new() -> Self {
         ClientSocketAcceptRepositoryImpl {
             client_list: Arc::new(AsyncMutex::new(HashMap::new())),
+            acceptor_channel_arc: None
         }
     }
 
@@ -36,27 +39,36 @@ impl ClientSocketAcceptRepositoryImpl {
 #[async_trait]
 impl ClientSocketAcceptRepository for ClientSocketAcceptRepositoryImpl {
 
-    async fn accept_client(&self, listener: &TcpListener) {
+    async fn accept_client(&mut self, listener: &TcpListener) {
         println!("Client Socket Accept Repository: accept()");
         loop {
             match listener.accept().await {
                 Ok((stream, peer_addr)) => {
                     println!("Accepted client from: {}", peer_addr);
-                    // Create a new SocketClient for the accepted client
                     let client = ClientSocket::new(peer_addr.to_string(), stream);
-
-                    // Add the client to the client list
                     let mut client_list_gaurd = self.client_list.lock().await;
+
                     client_list_gaurd.insert(client.address().to_string(), client.clone());
+
+                    if let Some(acceptor_channel) = &self.acceptor_channel_arc {
+                        let stream = client.stream();
+                        let _ = acceptor_channel.send(stream).await;
+                    } else {
+                        // Handle the case when acceptor_channel_arc is not initialized
+                        eprintln!("Acceptor channel is not initialized");
+                    }
                 }
                 Err(err) => {
-                    // Handle the error (e.g., log or propagate)
                     eprintln!("Error accepting client: {:?}", err);
                 }
             }
 
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
+    }
+
+    async fn inject_accept_channel(&mut self, acceptor_channel_arc: Arc<AcceptorChannel>) {
+        self.acceptor_channel_arc = Option::from(acceptor_channel_arc);
     }
 }
 
@@ -79,8 +91,14 @@ mod tests {
         let repository = ClientSocketAcceptRepositoryImpl::get_instance();
         let listener_clone = listener.clone();
 
+        let acceptor_channel = AcceptorChannel::new(1);
+        let acceptor_channel_arc = Arc::new(acceptor_channel.clone());
+
         tokio::spawn(async move {
-            let repository_gaurd = repository.lock().await;
+            let acceptor_channel_arc_clone = acceptor_channel_arc.clone();
+
+            let mut repository_gaurd = repository.lock().await;
+            repository_gaurd.inject_accept_channel(acceptor_channel_arc_clone).await;
             repository_gaurd.accept_client(&listener_clone).await;
         });
 

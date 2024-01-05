@@ -7,6 +7,7 @@ use crate::client_socket_accept::repository::client_socket_accept_repository_imp
 use crate::client_socket_accept::service::client_socket_accept_service::ClientSocketAcceptService;
 use crate::server_socket::repository::server_socket_repository::ServerSocketRepository;
 use crate::server_socket::repository::server_socket_repository_impl::ServerSocketRepositoryImpl;
+use crate::utility::initializer::AcceptorChannel;
 
 #[derive(Clone)]
 pub struct ClientSocketAcceptServiceImpl {
@@ -48,12 +49,17 @@ impl ClientSocketAcceptService for ClientSocketAcceptServiceImpl {
 
         if let Some(listener) = server_socket_repository_guard.get_listener().await {
             println!("get client_socket_accept_repository lock");
-            let client_socket_accept_guard = self.client_socket_accept_repository.lock().await;
+            let mut client_socket_accept_guard = self.client_socket_accept_repository.lock().await;
             let listener_guard = listener.lock().await;
             client_socket_accept_guard.accept_client(&*listener_guard).await;
         } else {
             eprintln!("Listener not available for accepting clients.");
         }
+    }
+
+    async fn inject_accept_channel(&self, acceptor_channel_arc: Arc<AcceptorChannel>) {
+        let mut client_socket_accept_service_guard = self.client_socket_accept_repository.lock().await;
+        client_socket_accept_service_guard.inject_accept_channel(acceptor_channel_arc).await;
     }
 }
 
@@ -86,7 +92,7 @@ mod tests {
             let listener_option_bind = listener_option.unwrap();
             let listener = listener_option_bind.lock().await;
 
-            let client_socket_accept_guard = client_socket_accept_repository.lock().await;
+            let mut client_socket_accept_guard = client_socket_accept_repository.lock().await;
 
             client_socket_accept_guard.accept_client(&*listener).await;
         });

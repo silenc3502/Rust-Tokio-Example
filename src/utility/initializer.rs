@@ -7,6 +7,7 @@ use crate::thread_control::service::thread_worker_service_impl::ThreadWorkerServ
 use tokio::sync::{mpsc, Mutex};
 use futures::future::err;
 use tokio::net::TcpStream;
+use crate::client_socket_accept::controller::client_socket_accept_controller::ClientSocketAcceptController;
 
 use crate::utility::mpsc::mpsc_creator::mpsc_channel::define_channel;
 
@@ -23,8 +24,11 @@ impl DomainInitializer {
         let _ = ThreadWorkerServiceImpl::get_instance();
     }
 
-    pub fn init_client_socket_accept_domain(&self, acceptor_channel_arc: Arc<AcceptorChannel>) {
-        let _ = ClientSocketAcceptControllerImpl::get_instance();
+    pub async fn init_client_socket_accept_domain(&self, acceptor_channel_arc: Arc<AcceptorChannel>) {
+        let client_socket_accept_controller_mutex = ClientSocketAcceptControllerImpl::get_instance();
+        let client_socket_accept_controller = client_socket_accept_controller_mutex.lock().await;
+
+        client_socket_accept_controller.inject_accept_channel(acceptor_channel_arc).await;
     }
 
     pub fn init_receiver_domain(&self) {

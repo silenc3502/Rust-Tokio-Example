@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use lazy_static::lazy_static;
@@ -8,6 +10,19 @@ use tokio::runtime::Handle;
 use tokio::task;
 use crate::thread_control::entity::thread_worker::ThreadWorker;
 use crate::thread_control::repository::thread_worker_repository::ThreadWorkerRepositoryTrait;
+
+trait CloneFunction: Send {
+    fn call(&self) -> Pin<Box<dyn Future<Output = ()>>>;
+}
+
+impl<T> CloneFunction for T
+    where
+        T: 'static + Fn() -> Pin<Box<dyn futures::Future<Output = ()>>> + Send,
+{
+    fn call(&self) -> Pin<Box<dyn futures::Future<Output = ()>>> {
+        (self)()
+    }
+}
 
 pub struct ThreadWorkerRepositoryImpl {
     thread_worker_list: HashMap<String, ThreadWorker>,
@@ -59,6 +74,7 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
                 let guard_deref = &*guard;
                 let real_function = &**guard_deref;
 
+                // 1.
                 let future = real_function();
 
                 task::block_in_place(move || {
@@ -66,6 +82,21 @@ impl ThreadWorkerRepositoryTrait for ThreadWorkerRepositoryImpl {
                         future.await
                     });
                 });
+
+                // 2.
+                // let function = function_arc_ref.lock().await.clone();
+                //
+                // task::spawn(async move {
+                //     function().await;
+                // }).await.unwrap();
+
+                // 3.
+                // let function = CloneFunction::clone_function(guard.as_ref());
+                //
+                // tokio::spawn(async move {
+                //     let function = CloneFunction::clone_function(guard.as_ref());
+                //     function().await;
+                // }).await.unwrap();
 
                 assert_eq!(worker.name(), name);
             } else {

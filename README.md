@@ -28,3 +28,27 @@ It's for Rust Tokio Example
     //
     // println!("Value: {}", result);
 ```
+
+```rust
+// // 쓰레드 생성 및 ID 가져오기
+    // let thread_id = worker_service.lock().unwrap().create_thread("Thread 1");
+    // println!("Created thread with ID: {:?}", thread_id);
+    //
+    // // 생성한 쓰레드 ID로 쓰레드 조회
+    // if let Some(worker) = worker_service.lock().unwrap().get_thread(thread_id) {
+    //     println!("Thread found: {:?}", worker);
+    // } else {
+    //     println!("Thread not found with ID: {:?}", thread_id);
+    // };
+
+    // println!("Main Thread ID: {:?}", thread::current().id());
+    //
+    // // 새로운 스레드 생성
+    // let handle = thread::spawn(|| {
+    //     // 생성된 스레드의 ID 출력
+    //     println!("Spawned Thread ID: {:?}", thread::current().id());
+    // });
+    //
+    // // 생성된 스레드의 종료 대기
+    // handle.join().unwrap();
+```

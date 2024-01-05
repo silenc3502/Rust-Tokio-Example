@@ -34,10 +34,10 @@ impl ServerReceiverServiceImpl {
 
 #[async_trait]
 impl ServerReceiverService for ServerReceiverServiceImpl {
-    async fn client_receive(self) {
+    async fn client_receive(&mut self) {
         println!("Server Receiver Service: receive()");
 
-        let server_receiver_repository_mutex = self.server_receiver_repository;
+        let server_receiver_repository_mutex = &self.server_receiver_repository;
         let mut server_receiver_repository_guard = server_receiver_repository_mutex.lock().await;
         server_receiver_repository_guard.receive().await;
     }

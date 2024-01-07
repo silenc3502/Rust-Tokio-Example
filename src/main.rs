@@ -4,6 +4,7 @@ mod utility;
 mod thread_control;
 mod client_socket_accept;
 mod receiver;
+mod transmitter;
 
 
 use std::future::Future;

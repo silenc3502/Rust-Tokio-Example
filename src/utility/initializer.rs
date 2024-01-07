@@ -5,7 +5,7 @@ use tokio::net::TcpStream;
 
 use crate::server_socket::service::server_socket_service_impl::ServerSocketServiceImpl;
 
-use crate::thread_control::service::thread_worker_service_impl::ThreadWorkerServiceImpl;
+// use crate::thread_control::service::thread_worker_service_impl::ThreadWorkerServiceImpl;
 
 use crate::client_socket_accept::controller::client_socket_accept_controller_impl::ClientSocketAcceptControllerImpl;
 use crate::client_socket_accept::controller::client_socket_accept_controller::ClientSocketAcceptController;
@@ -24,9 +24,9 @@ impl DomainInitializer {
         let _ = ServerSocketServiceImpl::get_instance();
     }
 
-    pub fn init_thread_control_domain(&self) {
-        let _ = ThreadWorkerServiceImpl::get_instance();
-    }
+    // pub fn init_thread_control_domain(&self) {
+    //     let _ = ThreadWorkerServiceImpl::get_instance();
+    // }
 
     pub async fn init_client_socket_accept_domain(&self, acceptor_channel_arc: Arc<AcceptorChannel>) {
         let client_socket_accept_controller_mutex = ClientSocketAcceptControllerImpl::get_instance();
@@ -47,7 +47,7 @@ impl DomainInitializer {
         let acceptor_channel_arc = Arc::new(acceptor_channel.clone());
 
         self.init_server_socket_domain();
-        self.init_thread_control_domain();
+        //self.init_thread_control_domain();
         self.init_client_socket_accept_domain(acceptor_channel_arc.clone()).await;
         self.init_receiver_domain(acceptor_channel_arc.clone()).await;
     }

@@ -1,1 +1,1 @@
-mod env_detector;
+pub mod env_detector;

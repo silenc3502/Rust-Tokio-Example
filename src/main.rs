@@ -19,7 +19,9 @@ use crate::server_socket::service::server_socket_service::ServerSocketService;
 use crate::server_socket::service::server_socket_service_impl::ServerSocketServiceImpl;
 use crate::thread_control::service::thread_worker_service::ThreadWorkerServiceTrait;
 use crate::thread_control::service::thread_worker_service_impl::ThreadWorkerServiceImpl;
+use crate::utility::env::env_detector::EnvDetector;
 use crate::utility::initializer::DomainInitializer;
+use crate::utility::ip_address::local_ip_finder::IPAddress;
 
 #[tokio::main]
 async fn main() {
@@ -30,7 +32,11 @@ async fn main() {
 
     let server_socket_service = ServerSocketServiceImpl::get_instance();
 
-    let address = "192.168.219.105:12345";
+    let ip = IPAddress::get_local_ip_from_google().unwrap();
+    let port = EnvDetector::get_port().unwrap();
+
+    let binding = format!("{}:{}", ip, port).to_string();
+    let address = binding.as_str();;
 
     let mut server_socket_service_guard = server_socket_service.lock().await;
 

@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::net::unix::SocketAddr;
+use tokio::sync::{Mutex as AsyncMutex, Mutex};
 use crate::receiver::entity::receive_data::ReceiveData;
 use crate::receiver::repository::server_receiver_repository::ServerReceiverRepository;
 use crate::utility::initializer::AcceptorChannel;
@@ -37,32 +38,70 @@ impl ServerReceiverRepositoryImpl {
 
 #[async_trait]
 impl ServerReceiverRepository for ServerReceiverRepositoryImpl {
+    // async fn receive(&mut self) {
+    //     println!("Server Receiver Repository: receive()");
+    //
+    //     if let Some(acceptor_channel) = &self.acceptor_channel_arc {
+    //         if let Some(stream_arc) = acceptor_channel.receive().await {
+    //             let mut stream = stream_arc.lock().await;
+    //
+    //             if let Ok(peer_addr) = stream.peer_addr() {
+    //                 println!("Connected client address: {}", peer_addr);
+    //             }
+    //
+    //             while let Ok(bytes_read) = stream.read(self.receive_data.receive_content_mut()).await {
+    //                 if bytes_read == 0 {
+    //                     break;
+    //                 }
+    //
+    //                 let stored_data = self.receive_data.get_receive_content();
+    //                 if let Ok(utf8_string) = from_utf8(&stored_data[..bytes_read]) {
+    //                     println!("Received content: {}", utf8_string);
+    //                 } else {
+    //                     println!("Received content is not a valid UTF-8 string");
+    //                 }
+    //             }
+    //         }
+    //     }
+    //
+    //     println!("Server Receiver Repository: client close socket");
+    // }
+
     async fn receive(&mut self) {
         println!("Server Receiver Repository: receive()");
 
         if let Some(acceptor_channel) = &self.acceptor_channel_arc {
-            if let Some(stream_arc) = acceptor_channel.receive().await {
-                let mut stream = stream_arc.lock().await;
+            while let Some(stream_arc) = acceptor_channel.receive().await {
+                let stream_result = stream_arc.lock().await.peer_addr();
 
-                if let Ok(peer_addr) = stream.peer_addr() {
-                    println!("Connected client address: {}", peer_addr);
-                }
+                match stream_result {
+                    Ok(peer_addr) => {
+                        println!("Connected client address: {}", peer_addr);
+                        let mut stream = stream_arc.lock().await;
 
-                while let Ok(bytes_read) = stream.read(self.receive_data.receive_content_mut()).await {
-                    if bytes_read == 0 {
-                        break;
-                    }
+                        while let Ok(bytes_read) = stream.read(self.receive_data.receive_content_mut()).await {
+                            if bytes_read == 0 {
+                                break;
+                            }
 
-                    let stored_data = self.receive_data.get_receive_content();
-                    if let Ok(utf8_string) = from_utf8(&stored_data[..bytes_read]) {
-                        println!("Received content: {}", utf8_string);
-                    } else {
-                        println!("Received content is not a valid UTF-8 string");
+                            let stored_data = self.receive_data.get_receive_content();
+                            if let Ok(utf8_string) = from_utf8(&stored_data[..bytes_read]) {
+                                println!("Received content: {}", utf8_string);
+                            } else {
+                                println!("Received content is not a valid UTF-8 string");
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        eprintln!("Failed to get peer address: {}", err);
                     }
                 }
             }
         }
+
+        println!("Server Receiver Repository: client close socket");
     }
+
 
     async fn inject_accept_channel(&mut self, acceptor_channel_arc: Arc<AcceptorChannel>) {
         self.acceptor_channel_arc = Option::from(acceptor_channel_arc);

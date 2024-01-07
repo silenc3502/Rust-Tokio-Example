@@ -1,3 +1,4 @@
+
 pub struct ReceiveData {
     receive_content: [u8; 1024]
 }
